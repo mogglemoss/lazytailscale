@@ -2,7 +2,7 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-pink.svg)
 ![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8.svg)
-![Built with Charm](https://raw.githubusercontent.com/charmbracelet/charm/main/title-dark.svg)
+[![Built with Charm](https://img.shields.io/badge/built_with-Charm-ff69b4.svg)](https://charm.sh)
 
 A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: peer list on the left, selected-peer detail on the right. Runs entirely from your local Tailscale socket — no API key, no cloud, no opinions about your network topology.
 
