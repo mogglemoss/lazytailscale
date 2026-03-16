@@ -1,0 +1,28 @@
+package model
+
+import (
+	"lazytailscale/tailscale"
+	"time"
+)
+
+// tickMsg fires on the peer-poll interval (5s).
+type tickMsg time.Time
+
+// pingTickMsg fires on the ping interval (10s).
+type pingTickMsg time.Time
+
+// peersLoadedMsg carries a freshly-fetched peer list and network info.
+type peersLoadedMsg struct {
+	peers []tailscale.Peer
+	info  tailscale.NetworkInfo
+	err   error
+}
+
+// pingResultMsg carries the result of a single ping.
+type pingResultMsg struct {
+	peerIP  string
+	latency time.Duration // PingFailed (-1) on error
+}
+
+// statusClearMsg clears the status bar error message.
+type statusClearMsg struct{}
