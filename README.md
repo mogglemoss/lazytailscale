@@ -25,6 +25,18 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install mogglemoss/tap/lazytailscale
+```
+
+### go install
+
+```bash
+go install github.com/mogglemoss/lazytailscale@latest
+```
+
 ### From source
 
 ```bash
@@ -32,12 +44,6 @@ git clone https://github.com/mogglemoss/lazytailscale
 cd lazytailscale
 go build -o lazytailscale .
 ./lazytailscale
-```
-
-### go install
-
-```bash
-go install github.com/mogglemoss/lazytailscale@latest
 ```
 
 Requires `tailscaled` running locally. On Linux, the process must have access to `/var/run/tailscale/tailscaled.sock` — run as the user who owns the Tailscale session, or with appropriate permissions.

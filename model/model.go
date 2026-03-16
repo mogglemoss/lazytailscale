@@ -122,8 +122,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errMsg = msg.err.Error()
 			cmds = append(cmds, clearStatusCmd())
 		} else {
-			m.errMsg = ""
-			m = m.mergePeers(msg.peers, msg.info)
+			var notifCmds []tea.Cmd
+			m, notifCmds = m.mergePeers(msg.peers, msg.info)
+			cmds = append(cmds, notifCmds...)
+			if len(notifCmds) == 0 {
+				m.errMsg = ""
+			}
 			m.list.SetItems(ui.PeersToItems(m.peers))
 			m = m.refreshDetail()
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging && len(p.PingHistory) == 0 {
@@ -347,19 +351,39 @@ func (m Model) refreshDetail() Model {
 	return m
 }
 
-func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) Model {
+func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (Model, []tea.Cmd) {
 	m.info = info
-	histMap := make(map[string][]time.Duration, len(m.peers))
-	for _, p := range m.peers {
-		histMap[p.TailscaleIP] = p.PingHistory
+
+	// Build lookup of previous online state and ping history by IP.
+	type prev struct {
+		online bool
+		hist   []time.Duration
+		seen   bool
 	}
+	prevMap := make(map[string]prev, len(m.peers))
+	for _, p := range m.peers {
+		prevMap[p.TailscaleIP] = prev{online: p.Online, hist: p.PingHistory, seen: true}
+	}
+
+	var cmds []tea.Cmd
 	for i := range fresh {
-		if hist, ok := histMap[fresh[i].TailscaleIP]; ok {
-			fresh[i].PingHistory = hist
+		ip := fresh[i].TailscaleIP
+		if p, ok := prevMap[ip]; ok {
+			fresh[i].PingHistory = p.hist
+			// Notify on status transitions for non-self peers.
+			if p.seen && !fresh[i].IsSelf && fresh[i].Online != p.online {
+				name := fresh[i].Hostname
+				if fresh[i].Online {
+					m.errMsg = name + " connected"
+				} else {
+					m.errMsg = name + " disconnected"
+				}
+				cmds = append(cmds, clearStatusCmd())
+			}
 		}
 	}
 	m.peers = fresh
-	return m
+	return m, cmds
 }
 
 func (m Model) applyPingResult(msg pingResultMsg) Model {

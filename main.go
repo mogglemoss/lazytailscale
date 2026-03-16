@@ -9,9 +9,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// version is set at build time by GoReleaser via ldflags.
+var version = "dev"
+
 func main() {
 	demo := flag.Bool("demo", false, "run with fictional demo data (no tailscaled required)")
+	ver := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *ver {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	m := model.New(*demo)
 	p := tea.NewProgram(m,

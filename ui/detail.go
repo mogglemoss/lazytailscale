@@ -149,6 +149,7 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 	b.WriteString(metaRow("PLATFORM", peer.OS))
 	b.WriteString(metaRow("LAST CONTACT", lastSeenStr(peer)))
 	b.WriteString(metaRow("HANDSHAKE", lastHandshakeStr(peer)))
+	b.WriteString(keyExpiryRow(peer))
 	if peer.IsExitNode {
 		exitLabel := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "EXIT NODE"))
 		exitVal := lipgloss.NewStyle().Foreground(S.T.Online).Render("active  (e to deactivate)")
@@ -211,6 +212,30 @@ func metaRow(label, value string) string {
 		S.DetailLabel.Render(fmt.Sprintf("%-12s", label)),
 		S.DetailValue.Render(value),
 	)
+}
+
+func keyExpiryRow(peer tailscale.Peer) string {
+	if peer.KeyExpiry.IsZero() {
+		return ""
+	}
+	d := time.Until(peer.KeyExpiry)
+	if d < 0 {
+		label := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "KEY EXPIRY"))
+		val := S.SparkBad.Render("expired")
+		return label + "  " + val + "\n"
+	}
+	days := int(d.Hours() / 24)
+	var val string
+	switch {
+	case days <= 3:
+		val = S.SparkBad.Render(fmt.Sprintf("in %d days — renew soon", days))
+	case days <= 14:
+		val = S.SparkMid.Render(fmt.Sprintf("in %d days", days))
+	default:
+		return "" // no noise when plenty of time remains
+	}
+	label := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "KEY EXPIRY"))
+	return label + "  " + val + "\n"
 }
 
 func lastSeenStr(peer tailscale.Peer) string {

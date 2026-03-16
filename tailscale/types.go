@@ -25,6 +25,7 @@ type Peer struct {
 	CanBeExitNode  bool      // true if this peer advertises exit node capability
 	StableNodeID   string    // stable identifier used to set exit node via API
 	LastHandshake  time.Time // time of last WireGuard handshake
+	KeyExpiry      time.Time // when this peer's Tailscale key expires (zero = no expiry)
 }
 
 // PingFailed is stored in PingHistory to indicate a ping that timed out or errored.

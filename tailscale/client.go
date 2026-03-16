@@ -114,6 +114,9 @@ func peerFromStatus(ps *ipnstate.PeerStatus) Peer {
 		StableNodeID:  string(ps.ID),
 		LastHandshake: ps.LastHandshake,
 	}
+	if ps.KeyExpiry != nil {
+		p.KeyExpiry = *ps.KeyExpiry
+	}
 
 	for _, ip := range ps.TailscaleIPs {
 		if ip.Is4() {
