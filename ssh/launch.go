@@ -7,13 +7,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Launch returns a tea.ExecCommand that SSHes into the given Tailscale IP.
+// Launch returns a tea.ExecCommand that SSHes into the given host as user.
 // Bubbletea suspends the TUI, hands off the terminal, and resumes on exit.
-func Launch(ip string) tea.Cmd {
-	cmd := exec.Command("ssh", ip)
+// host should be the MagicDNS name when available, falling back to the IP.
+func Launch(user, host string) tea.Cmd {
+	target := user + "@" + host
+	cmd := exec.Command("ssh", target)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		if err != nil {
-			return SSHErrorMsg{Err: fmt.Errorf("ssh %s: %w", ip, err)}
+			return SSHErrorMsg{Err: fmt.Errorf("ssh %s: %w", target, err)}
 		}
 		return SSHDoneMsg{}
 	})

@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -33,6 +34,31 @@ var fullHelp = []helpItem{
 	{"R", "refresh node registry"},
 	{"?", "toggle help overlay"},
 	{"q / ctrl+c", "terminate process"},
+}
+
+// RenderSSHPrompt renders the SSH username prompt, replacing the help bar.
+func RenderSSHPrompt(hostname, host, os string, input textinput.Model, width int) string {
+	sep := S.HelpSep.Render("  ·  ")
+
+	peer := S.DetailHeader.Render(hostname)
+	addr := S.DetailLabel.Render(host)
+
+	var note string
+	if strings.ToLower(os) == "windows" {
+		note = sep + S.ListDotIdle.Render("rdp may be more appropriate")
+	}
+
+	left := S.HelpKey.Render("ssh") + " " + peer + "  " + addr + note
+	mid := "  " + S.HelpKey.Render("as:") + " " + input.View()
+	right := sep + S.HelpKey.Render("enter") + S.HelpDesc.Render(" connect") +
+		sep + S.HelpKey.Render("esc") + S.HelpDesc.Render(" cancel")
+
+	bar := left + mid + right
+	return lipgloss.NewStyle().
+		Width(width).
+		Foreground(S.T.TextSecondary).
+		Padding(0, 1).
+		Render(bar)
 }
 
 // RenderHelpBar renders the bottom help bar.

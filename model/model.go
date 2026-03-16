@@ -7,6 +7,7 @@ import (
 	"github.com/mogglemoss/lazytailscale/tailscale"
 	"github.com/mogglemoss/lazytailscale/ui"
 	"os/exec"
+	"os/user"
 	"runtime"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -47,6 +49,13 @@ type Model struct {
 	pinging     bool
 	ready       bool
 	mascotFrame int
+
+	// SSH prompt state
+	sshPrompting bool
+	sshTarget    tailscale.Peer
+	sshInput     textinput.Model
+	sshUsernames map[string]string // hostname → last used username (session)
+	defaultUser  string            // local system username
 }
 
 // New creates and returns the initial model.
@@ -55,10 +64,18 @@ func New() Model {
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(ui.S.T.Accent)
 
+	// Detect local username as the default SSH user.
+	defaultUser := "user"
+	if u, err := user.Current(); err == nil {
+		defaultUser = u.Username
+	}
+
 	return Model{
-		keys:    DefaultKeyMap(),
-		client:  tailscale.NewClient(),
-		spinner: sp,
+		keys:         DefaultKeyMap(),
+		client:       tailscale.NewClient(),
+		spinner:      sp,
+		defaultUser:  defaultUser,
+		sshUsernames: make(map[string]string),
 	}
 }
 
@@ -136,6 +153,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
+		// SSH prompt intercepts all keys while active.
+		if m.sshPrompting {
+			return m.handleSSHPromptKey(msg)
+		}
+
 		// While filtering, forward all keys to the list.
 		if m.list.FilterState() == list.Filtering {
 			var cmd tea.Cmd
@@ -156,7 +178,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.SSH):
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf {
-				return m, ssh.Launch(p.TailscaleIP)
+				return m, m.enterSSHPrompt(*p)
 			}
 
 		case key.Matches(msg, m.keys.Ping):
@@ -213,7 +235,17 @@ func (m Model) View() string {
 	}
 
 	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame)
-	helpBar := ui.RenderHelpBar(m.width, m.showHelp)
+
+	var helpBar string
+	if m.sshPrompting {
+		host := m.sshTarget.DNSName
+		if host == "" {
+			host = m.sshTarget.TailscaleIP
+		}
+		helpBar = ui.RenderSSHPrompt(m.sshTarget.Hostname, host, m.sshTarget.OS, m.sshInput, m.width)
+	} else {
+		helpBar = ui.RenderHelpBar(m.width, m.showHelp)
+	}
 
 	listView := ui.S.PanelBorder.
 		Width(listPaneWidth).
@@ -317,6 +349,58 @@ func (m Model) applyPingResult(msg pingResultMsg) Model {
 		}
 	}
 	return m
+}
+
+// ── SSH prompt ───────────────────────────────────────────────────────────────
+
+func (m Model) enterSSHPrompt(peer tailscale.Peer) tea.Cmd {
+	m.sshTarget = peer
+	m.sshPrompting = true
+
+	// Pre-fill with last used username for this host, or local default.
+	prefill := m.defaultUser
+	if last, ok := m.sshUsernames[peer.Hostname]; ok {
+		prefill = last
+	}
+
+	ti := textinput.New()
+	ti.SetValue(prefill)
+	// Select all so the user can immediately type to replace.
+	ti.CursorEnd()
+	ti.Width = 20
+	ti.Prompt = ""
+	ti.TextStyle = ui.S.DetailValue
+	ti.Cursor.Style = ui.S.StatusLogo
+	ti.Focus()
+
+	m.sshInput = ti
+	return nil
+}
+
+func (m Model) handleSSHPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		username := strings.TrimSpace(m.sshInput.Value())
+		if username == "" {
+			username = m.defaultUser
+		}
+		m.sshUsernames[m.sshTarget.Hostname] = username
+		m.sshPrompting = false
+		host := m.sshTarget.DNSName
+		if host == "" {
+			host = m.sshTarget.TailscaleIP
+		}
+		return m, ssh.Launch(username, host)
+
+	case "esc", "ctrl+c":
+		m.sshPrompting = false
+		return m, nil
+
+	default:
+		var cmd tea.Cmd
+		m.sshInput, cmd = m.sshInput.Update(msg)
+		return m, cmd
+	}
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
