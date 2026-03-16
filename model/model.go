@@ -201,7 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.SSH):
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf {
-				return m, m.enterSSHPrompt(*p)
+				m = m.enterSSHPrompt(*p)
 			}
 
 		case key.Matches(msg, m.keys.Ping):
@@ -412,7 +412,7 @@ func (m Model) applyPingResult(msg pingResultMsg) Model {
 
 // ── SSH prompt ───────────────────────────────────────────────────────────────
 
-func (m Model) enterSSHPrompt(peer tailscale.Peer) tea.Cmd {
+func (m Model) enterSSHPrompt(peer tailscale.Peer) Model {
 	m.sshTarget = peer
 	m.sshPrompting = true
 
@@ -433,7 +433,7 @@ func (m Model) enterSSHPrompt(peer tailscale.Peer) tea.Cmd {
 	ti.Focus()
 
 	m.sshInput = ti
-	return nil
+	return m
 }
 
 func (m Model) handleSSHPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
