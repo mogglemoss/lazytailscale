@@ -65,6 +65,12 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 brew install mogglemoss/tap/lazytailscale
 ```
 
+### AUR (Arch Linux / Omarchy)
+
+```bash
+yay -S lazytailscale-bin
+```
+
 ### go install
 
 ```bash
