@@ -20,9 +20,9 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame
 		networkPart = S.StatusOffline.Render("● DISCONNECTED  ·  u to reconnect")
 	} else if info.NetworkName != "" {
 		dot := onlineDot(info.Online)
-		status := "NOMINAL"
+		status := "NODE NOMINAL"
 		if !info.Online {
-			status = "UNREACHABLE"
+			status = "NODE UNREACHABLE"
 		}
 		networkPart = S.StatusMeta.Render(fmt.Sprintf("%s · %s · %s %s",
 			info.NetworkName, info.SelfIP, dot, status))
