@@ -69,11 +69,15 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 
 func peerFromStatus(ps *ipnstate.PeerStatus) Peer {
 	p := Peer{
-		Hostname: ps.HostName,
-		DNSName:  strings.TrimSuffix(ps.DNSName, "."),
-		OS:       ps.OS,
-		Online:   ps.Online,
-		LastSeen: ps.LastSeen,
+		Hostname:      ps.HostName,
+		DNSName:       strings.TrimSuffix(ps.DNSName, "."),
+		OS:            ps.OS,
+		Online:        ps.Online,
+		LastSeen:      ps.LastSeen,
+		CurAddr:       ps.CurAddr,
+		Relay:         ps.Relay,
+		IsExitNode:    ps.ExitNode,
+		LastHandshake: ps.LastHandshake,
 	}
 
 	for _, ip := range ps.TailscaleIPs {

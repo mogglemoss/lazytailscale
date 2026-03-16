@@ -18,6 +18,11 @@ type Peer struct {
 	AllowedIPs       []netip.Prefix
 	PingHistory      []time.Duration // last 8 results, most recent last; -1 = failed
 	Tags             []string
+
+	CurAddr       string    // direct address if peer is connected directly
+	Relay         string    // DERP relay region name if relayed
+	IsExitNode    bool      // true if this is the active exit node
+	LastHandshake time.Time // time of last WireGuard handshake
 }
 
 // PingFailed is stored in PingHistory to indicate a ping that timed out or errored.

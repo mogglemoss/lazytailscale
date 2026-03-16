@@ -16,15 +16,15 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int) strin
 		networkPart = S.StatusOffline.Render(errMsg)
 	} else if info.NetworkName != "" {
 		dot := onlineDot(info.Online)
-		status := "online"
+		status := "NOMINAL"
 		if !info.Online {
-			status = "offline"
+			status = "UNREACHABLE"
 		}
 		meta := S.StatusMeta.Render(fmt.Sprintf("%s · %s · %s %s",
 			info.NetworkName, info.SelfIP, dot, status))
 		networkPart = meta
 	} else {
-		networkPart = S.StatusMeta.Render("connecting…")
+		networkPart = S.StatusMeta.Render("establishing substrate awareness…")
 	}
 
 	// Right-align the network part.

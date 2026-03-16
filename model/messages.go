@@ -26,3 +26,6 @@ type pingResultMsg struct {
 
 // statusClearMsg clears the status bar error message.
 type statusClearMsg struct{}
+
+// mascotTickMsg fires on the mascot animation interval (600ms).
+type mascotTickMsg time.Time

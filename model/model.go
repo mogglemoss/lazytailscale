@@ -42,10 +42,11 @@ type Model struct {
 	width  int
 	height int
 
-	showHelp   bool
-	showRoutes bool
-	pinging    bool
-	ready      bool
+	showHelp    bool
+	showRoutes  bool
+	pinging     bool
+	ready       bool
+	mascotFrame int
 }
 
 // New creates and returns the initial model.
@@ -67,6 +68,7 @@ func (m Model) Init() tea.Cmd {
 		m.fetchPeersCmd(),
 		m.tickCmd(),
 		m.pingTickCmd(),
+		m.mascotTickCmd(),
 		m.spinner.Tick,
 	)
 }
@@ -93,6 +95,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.pingCmd(p.TailscaleIP))
 		}
 
+	case mascotTickMsg:
+		m.mascotFrame++
+		cmds = append(cmds, m.mascotTickCmd())
+		m = m.refreshDetail()
+
 	case peersLoadedMsg:
 		if msg.err != nil {
 			m.errMsg = msg.err.Error()
@@ -102,6 +109,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.mergePeers(msg.peers, msg.info)
 			m.list.SetItems(ui.PeersToItems(m.peers))
 			m = m.refreshDetail()
+			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging && len(p.PingHistory) == 0 {
+				m.pinging = true
+				cmds = append(cmds, m.pingCmd(p.TailscaleIP))
+			}
 		}
 
 	case pingResultMsg:
@@ -179,6 +190,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 			if m.list.Index() != prevIdx {
 				m = m.refreshDetail()
+				if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging {
+					m.pinging = true
+					cmds = append(cmds, m.pingCmd(p.TailscaleIP))
+				}
 			}
 		}
 
@@ -271,7 +286,7 @@ func (m Model) refreshDetail() Model {
 	if p := m.selectedPeer(); p != nil {
 		peer = *p
 	}
-	m.viewport.SetContent(ui.RenderDetail(peer, m.showRoutes, m.viewport.Width))
+	m.viewport.SetContent(ui.RenderDetail(peer, m.showRoutes, m.viewport.Width, m.mascotFrame))
 	return m
 }
 
@@ -315,6 +330,12 @@ func (m Model) tickCmd() tea.Cmd {
 func (m Model) pingTickCmd() tea.Cmd {
 	return tea.Tick(pingPollInterval, func(t time.Time) tea.Msg {
 		return pingTickMsg(t)
+	})
+}
+
+func (m Model) mascotTickCmd() tea.Cmd {
+	return tea.Tick(600*time.Millisecond, func(t time.Time) tea.Msg {
+		return mascotTickMsg(t)
 	})
 }
 

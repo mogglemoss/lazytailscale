@@ -55,11 +55,31 @@ func (d PeerDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	dot := statusDot(peer)
 
 	// Hostname: truncated, padded to hostnameMax.
+	// Exit node gets a ⬡ marker rendered separately in Online color.
+	var exitMarker string
 	hostname := truncate(peer.Hostname, hostnameMax)
 	if peer.IsSelf {
 		hostname = truncate(peer.Hostname, hostnameMax-1) + "~" // trailing ~ marks self
+	} else if peer.IsExitNode {
+		// Reserve 2 chars for " ⬡", truncate base accordingly
+		base := truncate(peer.Hostname, hostnameMax-2)
+		baseLen := utf8.RuneCountInString(base)
+		pad := hostnameMax - 2 - baseLen
+		if pad < 0 {
+			pad = 0
+		}
+		hostname = base + strings.Repeat(" ", pad)
+		exitMarker = " " + S.ListDotOnline.Render("⬡")
 	}
-	hostPadded := hostname + strings.Repeat(" ", hostnameMax-utf8.RuneCountInString(hostname))
+
+	hostLen := utf8.RuneCountInString(hostname)
+	if exitMarker == "" {
+		hostPad := hostnameMax - hostLen
+		if hostPad < 0 {
+			hostPad = 0
+		}
+		hostname = hostname + strings.Repeat(" ", hostPad)
+	}
 
 	// OS tag: fixed tagCols wide, right-padded.
 	tag := truncate(osTag(peer.OS), tagCols)
@@ -71,13 +91,13 @@ func (d PeerDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 	var hostnameStr string
 	if selected {
-		hostnameStr = S.ListItemSelected.Render(hostPadded)
+		hostnameStr = S.ListItemSelected.Render(hostname)
 	} else {
-		hostnameStr = S.ListItem.Render(hostPadded)
+		hostnameStr = S.ListItem.Render(hostname)
 	}
 
 	// Final row — exactly listWidth visual chars.
-	row := cursor + " " + dot + " " + hostnameStr + " " + tagStr
+	row := cursor + " " + dot + " " + hostnameStr + exitMarker + " " + tagStr
 	fmt.Fprint(w, row)
 }
 

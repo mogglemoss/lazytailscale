@@ -12,7 +12,7 @@ import (
 const sparkChars = "▁▂▃▄▅▆▇█"
 
 // RenderDetail returns the full content string for the detail viewport.
-func RenderDetail(peer tailscale.Peer, showRoutes bool, width int) string {
+func RenderDetail(peer tailscale.Peer, showRoutes bool, width int, mascotFrame int) string {
 	if peer.Hostname == "" {
 		return S.DetailLabel.Render("\n  No peer selected")
 	}
@@ -32,27 +32,54 @@ func RenderDetail(peer tailscale.Peer, showRoutes bool, width int) string {
 	}
 	b.WriteString("\n\n")
 
-	// ── Meta ─────────────────────────────────────────────────────────────────
-	b.WriteString(S.DetailSection.Render("META"))
+	// For self node: show the mascot instead of normal detail
+	if peer.IsSelf {
+		headerStr := b.String()
+		return headerStr + RenderMascot(mascotFrame, width)
+	}
+
+	// ── Connection (online peers only) ────────────────────────────────────
+	if peer.Online {
+		b.WriteString(S.DetailSection.Render("CONNECTION"))
+		b.WriteString("\n")
+		switch {
+		case peer.CurAddr != "":
+			b.WriteString("  " + S.ListDotOnline.Render("◈") + S.DetailLabel.Render(" direct") + "   " + S.DetailValue.Render(peer.CurAddr) + "\n")
+		case peer.Relay != "":
+			b.WriteString("  " + S.ListDotIdle.Render("◌") + S.DetailLabel.Render(" relayed") + "  " + S.DetailValue.Render("via "+peer.Relay) + "\n")
+		default:
+			b.WriteString("  " + S.ListDotUnknown.Render("○") + S.DetailLabel.Render(" unknown") + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// ── Node Record ─────────────────────────────────────────────────────────
+	b.WriteString(S.DetailSection.Render("NODE RECORD"))
 	b.WriteString("\n")
-	b.WriteString(metaRow("OS", peer.OS))
-	b.WriteString(metaRow("Last seen", lastSeenStr(peer)))
+	b.WriteString(metaRow("PLATFORM", peer.OS))
+	b.WriteString(metaRow("LAST CONTACT", lastSeenStr(peer)))
+	b.WriteString(metaRow("HANDSHAKE", lastHandshakeStr(peer)))
+	if peer.IsExitNode {
+		exitLabel := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "EXIT NODE"))
+		exitVal := lipgloss.NewStyle().Foreground(S.T.Online).Render("active")
+		b.WriteString(exitLabel + "  " + exitVal + "\n")
+	}
 	b.WriteString("\n")
 
-	// ── Ping ─────────────────────────────────────────────────────────────────
-	b.WriteString(S.DetailSection.Render("PING"))
+	// ── Latency Assessment ───────────────────────────────────────────────────
+	b.WriteString(S.DetailSection.Render("LATENCY ASSESSMENT"))
 	b.WriteString("\n")
 	b.WriteString(renderSparkline(peer.PingHistory))
 	b.WriteString("\n")
 	b.WriteString(renderPingStats(peer.PingHistory))
 	b.WriteString("\n\n")
 
-	// ── Routes ───────────────────────────────────────────────────────────────
+	// ── Claimed Prefixes ─────────────────────────────────────────────────────
 	// Only show subnet routes (AdvertisedRoutes = PrimaryRoutes from Tailscale).
 	// We deliberately skip AllowedIPs — those are just the peer's own /32 Tailscale
 	// IPs and aren't useful to display.
 	if len(peer.AdvertisedRoutes) > 0 {
-		b.WriteString(S.DetailSection.Render("ROUTES"))
+		b.WriteString(S.DetailSection.Render("CLAIMED PREFIXES"))
 		b.WriteString("\n")
 		routes := peer.AdvertisedRoutes
 		display := routes
@@ -69,9 +96,9 @@ func RenderDetail(peer tailscale.Peer, showRoutes bool, width int) string {
 		b.WriteString("\n")
 	}
 
-	// ── Tags ─────────────────────────────────────────────────────────────────
+	// ── Classifications ──────────────────────────────────────────────────────
 	if len(peer.Tags) > 0 {
-		b.WriteString(S.DetailSection.Render("TAGS"))
+		b.WriteString(S.DetailSection.Render("CLASSIFICATIONS"))
 		b.WriteString("\n")
 		for _, tag := range peer.Tags {
 			b.WriteString("  " + S.HelpKey.Render(tag) + "\n")
@@ -87,7 +114,7 @@ func metaRow(label, value string) string {
 		return ""
 	}
 	return fmt.Sprintf("  %s  %s\n",
-		S.DetailLabel.Render(fmt.Sprintf("%-10s", label)),
+		S.DetailLabel.Render(fmt.Sprintf("%-12s", label)),
 		S.DetailValue.Render(value),
 	)
 }
@@ -112,9 +139,26 @@ func lastSeenStr(peer tailscale.Peer) string {
 	}
 }
 
+func lastHandshakeStr(peer tailscale.Peer) string {
+	if peer.LastHandshake.IsZero() {
+		return ""
+	}
+	d := time.Since(peer.LastHandshake).Round(time.Second)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
 func renderSparkline(history []time.Duration) string {
 	if len(history) == 0 {
-		return S.DetailLabel.Render("  no data yet")
+		return S.DetailLabel.Render("  awaiting telemetry")
 	}
 
 	var maxD time.Duration
@@ -170,7 +214,7 @@ func renderPingStats(history []time.Duration) string {
 		}
 	}
 	if count == 0 {
-		return S.DetailLabel.Render("  all pings failed")
+		return S.DetailLabel.Render("  node unresponsive to inquiry")
 	}
 	avg := total / time.Duration(count)
 	return fmt.Sprintf("  %s  avg %s  min %s  max %s",

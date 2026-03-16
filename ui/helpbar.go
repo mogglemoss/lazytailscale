@@ -13,26 +13,26 @@ type helpItem struct {
 
 var shortHelp = []helpItem{
 	{"↑/k↓/j", "navigate"},
-	{"enter", "ssh"},
+	{"enter", "initiate contact"},
 	{"p", "ping"},
-	{"r", "routes"},
-	{"c", "copy ip"},
+	{"r", "prefixes"},
+	{"c", "copy address"},
 	{"/", "filter"},
 	{"?", "more"},
-	{"q", "quit"},
+	{"q", "terminate"},
 }
 
 var fullHelp = []helpItem{
-	{"↑/k", "prev peer"},
-	{"↓/j", "next peer"},
-	{"enter", "ssh into peer"},
-	{"p", "ping now"},
-	{"r", "toggle routes"},
-	{"c", "copy ip"},
-	{"/", "filter list"},
-	{"R", "refresh"},
-	{"?", "toggle help"},
-	{"q / ctrl+c", "quit"},
+	{"↑/k", "prev node"},
+	{"↓/j", "next node"},
+	{"enter", "initiate ssh contact"},
+	{"p", "ping selected node"},
+	{"r", "toggle claimed prefixes"},
+	{"c", "copy tailscale address"},
+	{"/", "filter node registry"},
+	{"R", "refresh node registry"},
+	{"?", "toggle help overlay"},
+	{"q / ctrl+c", "terminate process"},
 }
 
 // RenderHelpBar renders the bottom help bar.
