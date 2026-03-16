@@ -2,7 +2,6 @@ package tailscale
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	ts "tailscale.com/client/tailscale"
@@ -47,16 +46,7 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 		peers = append(peers, peerFromStatus(ps))
 	}
 
-	// Sort: self first, then online, then alphabetical.
-	sort.SliceStable(peers, func(i, j int) bool {
-		if peers[i].IsSelf != peers[j].IsSelf {
-			return peers[i].IsSelf
-		}
-		if peers[i].Online != peers[j].Online {
-			return peers[i].Online
-		}
-		return strings.ToLower(peers[i].Hostname) < strings.ToLower(peers[j].Hostname)
-	})
+	sortPeers(peers)
 
 	info := NetworkInfo{
 		NetworkName: st.MagicDNSSuffix,
