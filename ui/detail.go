@@ -9,21 +9,67 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// creatureVisibleWidth is the rendered width of CreatureLines entries.
+const creatureVisibleWidth = 4
+
 const sparkChars = "▁▂▃▄▅▆▇█"
 
 // RenderDetail returns the full content string for the detail viewport.
-func RenderDetail(peer tailscale.Peer, showRoutes bool, width int, mascotFrame int) string {
+func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bool, width int, mascotFrame int) string {
 	if peer.Hostname == "" {
 		return S.DetailLabel.Render("\n  No peer selected")
 	}
 
 	var b strings.Builder
 
-	// ── Header ──────────────────────────────────────────────────────────────
+	// ── Header (with inline creature for self node) ───────────────────────
 	heading := peer.Hostname
 	if peer.IsSelf {
 		heading += "  " + S.DetailLabel.Render("(this device)")
 	}
+
+	if peer.IsSelf {
+		// Render heading + IP line alongside the creature (right-aligned).
+		creature := CreatureLines(mascotFrame)
+		leftWidth := width - creatureVisibleWidth - 1
+		if leftWidth < 1 {
+			leftWidth = 1
+		}
+
+		headerLines := [3]string{
+			S.DetailHeader.Render(heading),
+			S.DetailLabel.Render(peer.TailscaleIP + "  ·  " + peer.DNSName),
+			"",
+		}
+		for i := 0; i < 3; i++ {
+			left := lipgloss.NewStyle().Width(leftWidth).Render(headerLines[i])
+			b.WriteString(left + creature[i] + "\n")
+		}
+		b.WriteString("\n")
+
+		// ── Network substrate stats ──────────────────────────────────────────
+		b.WriteString(S.DetailSection.Render("NODE RECORD"))
+		b.WriteString("\n")
+		b.WriteString(metaRow("PLATFORM", peer.OS))
+		b.WriteString(metaRow("ADDRESS", peer.TailscaleIP))
+		b.WriteString(metaRow("TAILNET", info.NetworkName))
+		b.WriteString("\n")
+
+		b.WriteString(S.DetailSection.Render("NETWORK SUBSTRATE"))
+		b.WriteString("\n")
+		offline := info.TotalPeers - info.OnlinePeers
+		b.WriteString(fmt.Sprintf("  %s  %s · %s · %s\n",
+			S.DetailLabel.Render(fmt.Sprintf("%-12s", "NODES")),
+			S.DetailValue.Render(fmt.Sprintf("%d enrolled", info.TotalPeers)),
+			S.ListDotOnline.Render(fmt.Sprintf("%d nominal", info.OnlinePeers)),
+			S.ListDotOffline.Render(fmt.Sprintf("%d unreachable", offline)),
+		))
+		b.WriteString("\n")
+		b.WriteString(S.DetailLabel.Render("  network substrate nominal. this assessment is considered final."))
+		return b.String()
+	}
+
+	// ── Non-self header ───────────────────────────────────────────────────
 	b.WriteString(S.DetailHeader.Render(heading))
 	b.WriteString("\n")
 	b.WriteString(S.DetailLabel.Render(peer.TailscaleIP))
@@ -31,12 +77,6 @@ func RenderDetail(peer tailscale.Peer, showRoutes bool, width int, mascotFrame i
 		b.WriteString(S.DetailLabel.Render("  ·  " + peer.DNSName))
 	}
 	b.WriteString("\n\n")
-
-	// For self node: show the mascot instead of normal detail
-	if peer.IsSelf {
-		headerStr := b.String()
-		return headerStr + RenderMascot(mascotFrame, width)
-	}
 
 	// ── Connection (online peers only) ────────────────────────────────────
 	if peer.Online {

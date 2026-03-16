@@ -64,6 +64,16 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 		}
 	}
 
+	for _, p := range peers {
+		if p.IsSelf {
+			continue
+		}
+		info.TotalPeers++
+		if p.Online {
+			info.OnlinePeers++
+		}
+	}
+
 	return peers, info, nil
 }
 

@@ -8,8 +8,10 @@ import (
 )
 
 // RenderStatusBar renders the top status bar.
-func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int) string {
-	logo := S.StatusLogo.Render("◈ lazytailscale")
+func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame int) string {
+	// Logo with animated tail — one subtle character that blinks.
+	tail := StatusLogoTail(frame)
+	logo := S.StatusLogo.Render("◈") + tail + S.StatusLogo.Render("lazytailscale")
 
 	var networkPart string
 	if errMsg != "" {
@@ -20,9 +22,8 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int) strin
 		if !info.Online {
 			status = "UNREACHABLE"
 		}
-		meta := S.StatusMeta.Render(fmt.Sprintf("%s · %s · %s %s",
+		networkPart = S.StatusMeta.Render(fmt.Sprintf("%s · %s · %s %s",
 			info.NetworkName, info.SelfIP, dot, status))
-		networkPart = meta
 	} else {
 		networkPart = S.StatusMeta.Render("establishing substrate awareness…")
 	}
@@ -34,9 +35,8 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int) strin
 	if gap < 1 {
 		gap = 1
 	}
-	spaces := fmt.Sprintf("%*s", gap, "")
 
-	bar := logo + spaces + networkPart
+	bar := logo + fmt.Sprintf("%*s", gap, "") + networkPart
 	return S.StatusBar.Width(width).Render(bar)
 }
 

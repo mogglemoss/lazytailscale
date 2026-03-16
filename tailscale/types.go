@@ -30,8 +30,10 @@ const PingFailed = time.Duration(-1)
 
 // NetworkInfo holds information about our own node and the tailnet.
 type NetworkInfo struct {
-	NetworkName string // MagicDNS suffix, e.g. "magpie-cherimoya.ts.net"
-	SelfIP      string
-	SelfName    string
-	Online      bool
+	NetworkName  string // MagicDNS suffix, e.g. "magpie-cherimoya.ts.net"
+	SelfIP       string
+	SelfName     string
+	Online       bool
+	TotalPeers   int // excludes self
+	OnlinePeers  int // excludes self
 }

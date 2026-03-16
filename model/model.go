@@ -212,7 +212,7 @@ func (m Model) View() string {
 		return "\n  " + m.spinner.View() + " Loading…\n"
 	}
 
-	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width)
+	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame)
 	helpBar := ui.RenderHelpBar(m.width, m.showHelp)
 
 	listView := ui.S.PanelBorder.
@@ -286,7 +286,7 @@ func (m Model) refreshDetail() Model {
 	if p := m.selectedPeer(); p != nil {
 		peer = *p
 	}
-	m.viewport.SetContent(ui.RenderDetail(peer, m.showRoutes, m.viewport.Width, m.mascotFrame))
+	m.viewport.SetContent(ui.RenderDetail(peer, m.info, m.showRoutes, m.viewport.Width, m.mascotFrame))
 	return m
 }
 
