@@ -2,10 +2,10 @@ package model
 
 import (
 	"context"
-	"lazytailscale/ping"
-	"lazytailscale/ssh"
-	"lazytailscale/tailscale"
-	"lazytailscale/ui"
+	"github.com/mogglemoss/lazytailscale/ping"
+	"github.com/mogglemoss/lazytailscale/ssh"
+	"github.com/mogglemoss/lazytailscale/tailscale"
+	"github.com/mogglemoss/lazytailscale/ui"
 	"os/exec"
 	"runtime"
 	"strings"

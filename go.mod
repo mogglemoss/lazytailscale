@@ -1,4 +1,4 @@
-module lazytailscale
+module github.com/mogglemoss/lazytailscale
 
 go 1.26.1
 

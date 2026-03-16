@@ -1,7 +1,7 @@
 package model
 
 import (
-	"lazytailscale/tailscale"
+	"github.com/mogglemoss/lazytailscale/tailscale"
 	"time"
 )
 

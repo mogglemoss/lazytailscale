@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
-	"lazytailscale/tailscale"
+	"github.com/mogglemoss/lazytailscale/tailscale"
 	"strings"
 	"time"
 	"unicode/utf8"

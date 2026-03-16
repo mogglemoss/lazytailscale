@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"lazytailscale/model"
+	"github.com/mogglemoss/lazytailscale/model"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"

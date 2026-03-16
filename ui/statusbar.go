@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"lazytailscale/tailscale"
+	"github.com/mogglemoss/lazytailscale/tailscale"
 
 	"github.com/charmbracelet/lipgloss"
 )
