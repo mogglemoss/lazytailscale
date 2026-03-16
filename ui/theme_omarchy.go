@@ -17,7 +17,7 @@ func LoadOmarchyTheme() (Theme, bool) {
 		return Theme{}, false
 	}
 
-	themeDir := filepath.Join(home, ".config", "omarchy", "themes", "current")
+	themeDir := filepath.Join(home, ".config", "omarchy", "current", "theme")
 	data, err := os.ReadFile(filepath.Join(themeDir, "colors.toml"))
 	if err != nil {
 		return Theme{}, false
