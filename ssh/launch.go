@@ -3,16 +3,28 @@ package ssh
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// safeUsername allows the character set SSH accepts: alphanumeric, hyphen,
+// underscore, dot. Rejects anything that could be interpreted as an SSH flag.
+var safeUsername = regexp.MustCompile(`^[a-zA-Z0-9_.\-]+$`)
 
 // Launch returns a tea.ExecCommand that SSHes into the given host as user.
 // Bubbletea suspends the TUI, hands off the terminal, and resumes on exit.
 // host should be the MagicDNS name when available, falling back to the IP.
 func Launch(user, host string) tea.Cmd {
+	if !safeUsername.MatchString(user) {
+		return func() tea.Msg {
+			return SSHErrorMsg{Err: fmt.Errorf("invalid username: %q", user)}
+		}
+	}
+	// Use -l and -- to prevent flag injection: -l passes the username as a
+	// named argument, -- ends SSH's option parsing so host can't be a flag.
+	cmd := exec.Command("ssh", "-l", user, "--", host)
 	target := user + "@" + host
-	cmd := exec.Command("ssh", target)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		if err != nil {
 			return SSHErrorMsg{Err: fmt.Errorf("ssh %s: %w", target, err)}
