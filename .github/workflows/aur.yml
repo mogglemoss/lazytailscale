@@ -1,0 +1,39 @@
+name: Publish AUR package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  aur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version and checksums
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          curl -sL "https://github.com/mogglemoss/lazytailscale/releases/download/${GITHUB_REF_NAME}/checksums.txt" -o checksums.txt
+          echo "amd64=$(grep linux_amd64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "arm64=$(grep linux_arm64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Update PKGBUILD
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.meta.outputs.version }}/" aur/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" aur/PKGBUILD
+          sed -i "s/sha256sums_x86_64=('.*')/sha256sums_x86_64=('${{ steps.meta.outputs.amd64 }}')/" aur/PKGBUILD
+          sed -i "s/sha256sums_aarch64=('.*')/sha256sums_aarch64=('${{ steps.meta.outputs.arm64 }}')/" aur/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: lazytailscale-bin
+          pkgbuild: ./aur/PKGBUILD
+          commit_username: mogglemoss
+          commit_email: scott.corbin@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+          allow_empty_commits: false
