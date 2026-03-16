@@ -512,9 +512,10 @@ func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
 		if msg.Action != tea.MouseActionRelease || !inListPane {
 			break
 		}
-		// Mouse coords are 1-indexed; status bar occupies row 1.
-		// So first list item is at y=2 → row 0.
-		row := msg.Y - 2
+		// Mouse coords are 1-indexed. Row 1 = app status bar.
+		// Row 2 = list status bar (SetShowStatusBar(true) renders above items).
+		// Row 3 = first list item → row 0.
+		row := msg.Y - 3
 		if row < 0 {
 			break
 		}
