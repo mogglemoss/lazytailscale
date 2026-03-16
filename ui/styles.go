@@ -52,6 +52,7 @@ type Styles struct {
 	ListDotOffline   lipgloss.Style
 	ListDotUnknown   lipgloss.Style
 	ListTag          lipgloss.Style
+	ListStatusBar    lipgloss.Style
 
 	// Detail panel
 	DetailBorder  lipgloss.Style
@@ -101,6 +102,7 @@ func New(t Theme) Styles {
 	s.ListDotOffline = lipgloss.NewStyle().Foreground(t.Offline)
 	s.ListDotUnknown = lipgloss.NewStyle().Foreground(t.Unknown)
 	s.ListTag = lipgloss.NewStyle().Foreground(t.TextSecondary)
+	s.ListStatusBar = lipgloss.NewStyle().Foreground(t.TextSecondary)
 
 	// Detail panel
 	s.DetailBorder = lipgloss.NewStyle().
@@ -134,5 +136,13 @@ func New(t Theme) Styles {
 	return s
 }
 
-// S is the active styles singleton, built from the Default theme.
-var S = New(Default)
+// S is the active styles singleton. Omarchy theme is used when detected,
+// falling back to the built-in Default.
+var S = initStyles()
+
+func initStyles() Styles {
+	if theme, ok := LoadOmarchyTheme(); ok {
+		return New(theme)
+	}
+	return New(Default)
+}

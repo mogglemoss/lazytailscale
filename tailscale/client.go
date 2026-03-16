@@ -6,21 +6,29 @@ import (
 	"strings"
 
 	ts "tailscale.com/client/tailscale"
+	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/tailcfg"
 )
 
 // Client wraps the Tailscale LocalClient.
 type Client struct {
-	lc ts.LocalClient
+	lc             ts.LocalClient
+	demo           bool
+	demoExitNodeID string // tracks the active exit node in demo mode
 }
 
 // NewClient returns a new Client using the local tailscaled socket.
-func NewClient() *Client {
-	return &Client{}
+// If demo is true, FetchStatus returns static fictional data.
+func NewClient(demo bool) *Client {
+	return &Client{demo: demo}
 }
 
 // FetchStatus returns the current peer list and network info.
 func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
+	if c.demo {
+		return c.demoStatus()
+	}
 	st, err := c.lc.Status(ctx)
 	if err != nil {
 		return nil, NetworkInfo{}, err
@@ -77,6 +85,21 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 	return peers, info, nil
 }
 
+// SetExitNode sets the given peer as the exit node, or clears it if stableID is empty.
+func (c *Client) SetExitNode(ctx context.Context, stableID string) error {
+	if c.demo {
+		c.demoExitNodeID = stableID
+		return nil
+	}
+	_, err := c.lc.EditPrefs(ctx, &ipn.MaskedPrefs{
+		ExitNodeIDSet: true,
+		Prefs: ipn.Prefs{
+			ExitNodeID: tailcfg.StableNodeID(stableID),
+		},
+	})
+	return err
+}
+
 func peerFromStatus(ps *ipnstate.PeerStatus) Peer {
 	p := Peer{
 		Hostname:      ps.HostName,
@@ -87,6 +110,8 @@ func peerFromStatus(ps *ipnstate.PeerStatus) Peer {
 		CurAddr:       ps.CurAddr,
 		Relay:         ps.Relay,
 		IsExitNode:    ps.ExitNode,
+		CanBeExitNode: ps.ExitNodeOption,
+		StableNodeID:  string(ps.ID),
 		LastHandshake: ps.LastHandshake,
 	}
 

@@ -151,11 +151,15 @@ func NewPeerList(peers []tailscale.Peer, height int) list.Model {
 
 	l := list.New(items, PeerDelegate{}, listWidth, height)
 	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
+	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
 	l.DisableQuitKeybindings()
+	l.SetStatusBarItemName("node", "nodes")
 
+	l.Styles.StatusBar = S.ListStatusBar
+	l.Styles.StatusBarActiveFilter = S.ListStatusBar
+	l.Styles.StatusBarFilterCount = S.ListStatusBar
 	l.Styles.NoItems = lipgloss.NewStyle().
 		Foreground(S.T.TextSecondary).
 		Padding(1, 2)

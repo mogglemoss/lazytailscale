@@ -14,26 +14,27 @@ type helpItem struct {
 
 var shortHelp = []helpItem{
 	{"↑/k↓/j", "navigate"},
-	{"enter", "initiate contact"},
+	{"enter", "ssh"},
 	{"p", "ping"},
-	{"r", "prefixes"},
-	{"c", "copy address"},
+	{"e", "exit node"},
+	{"c", "copy"},
 	{"/", "filter"},
 	{"?", "more"},
-	{"q", "terminate"},
+	{"q", "quit"},
 }
 
 var fullHelp = []helpItem{
 	{"↑/k", "prev node"},
 	{"↓/j", "next node"},
-	{"enter", "initiate ssh contact"},
+	{"enter", "ssh into node"},
 	{"p", "ping selected node"},
-	{"r", "toggle claimed prefixes"},
-	{"c", "copy tailscale address"},
-	{"/", "filter node registry"},
-	{"R", "refresh node registry"},
-	{"?", "toggle help overlay"},
-	{"q / ctrl+c", "terminate process"},
+	{"e", "toggle exit node"},
+	{"r", "toggle subnet routes"},
+	{"c", "copy address (dns preferred)"},
+	{"/", "filter node list"},
+	{"R", "refresh node list"},
+	{"?", "toggle help"},
+	{"q / ctrl+c", "quit"},
 }
 
 // RenderSSHPrompt renders the SSH username prompt, replacing the help bar.

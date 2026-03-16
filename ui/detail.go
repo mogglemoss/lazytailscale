@@ -14,6 +14,56 @@ const creatureVisibleWidth = 4
 
 const sparkChars = "▁▂▃▄▅▆▇█"
 
+// RenderNoTailscale renders a friendly error panel for when tailscaled isn't reachable.
+func RenderNoTailscale(errMsg string, width int) string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(S.DetailHeader.Render("  substrate connection failure") + "\n\n")
+
+	lines := []string{
+		"lazytailscale has attempted to contact the local tailscaled",
+		"daemon and received only silence in return.",
+		"",
+		"this could mean tailscaled is not running. it could also mean",
+		"tailscaled is running and simply does not wish to be disturbed.",
+		"lazytailscale has chosen not to speculate further.",
+		"",
+		"an inquiry will be filed every 5 seconds. lazytailscale hopes",
+		"for the best.",
+	}
+	for _, l := range lines {
+		if l == "" {
+			b.WriteString("\n")
+		} else {
+			b.WriteString(S.DetailLabel.Render("  "+l) + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(S.DetailSection.Render("  REMEDIATION OPTIONS") + "\n\n")
+
+	steps := []struct{ os, cmd string }{
+		{"macOS  ", "open the Tailscale menu bar app"},
+		{"Linux  ", "sudo systemctl start tailscaled"},
+		{"Windows", "open the Tailscale application"},
+	}
+	for _, s := range steps {
+		b.WriteString(fmt.Sprintf("  %s  %s\n",
+			S.DetailLabel.Render(s.os),
+			S.DetailValue.Render(s.cmd),
+		))
+	}
+
+	if errMsg != "" {
+		b.WriteString("\n")
+		b.WriteString(S.DetailLabel.Render("  error: "+errMsg) + "\n")
+	}
+
+	_ = width
+	return b.String()
+}
+
 // RenderDetail returns the full content string for the detail viewport.
 func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bool, width int, mascotFrame int) string {
 	if peer.Hostname == "" {
@@ -101,7 +151,11 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 	b.WriteString(metaRow("HANDSHAKE", lastHandshakeStr(peer)))
 	if peer.IsExitNode {
 		exitLabel := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "EXIT NODE"))
-		exitVal := lipgloss.NewStyle().Foreground(S.T.Online).Render("active")
+		exitVal := lipgloss.NewStyle().Foreground(S.T.Online).Render("active  (e to deactivate)")
+		b.WriteString(exitLabel + "  " + exitVal + "\n")
+	} else if peer.CanBeExitNode {
+		exitLabel := S.DetailLabel.Render(fmt.Sprintf("  %-12s", "EXIT NODE"))
+		exitVal := S.DetailLabel.Render("available  (e to activate)")
 		b.WriteString(exitLabel + "  " + exitVal + "\n")
 	}
 	b.WriteString("\n")

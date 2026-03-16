@@ -59,7 +59,7 @@ type Model struct {
 }
 
 // New creates and returns the initial model.
-func New() Model {
+func New(demo bool) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(ui.S.T.Accent)
@@ -72,7 +72,7 @@ func New() Model {
 
 	return Model{
 		keys:         DefaultKeyMap(),
-		client:       tailscale.NewClient(),
+		client:       tailscale.NewClient(demo),
 		spinner:      sp,
 		defaultUser:  defaultUser,
 		sshUsernames: make(map[string]string),
@@ -140,6 +140,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusClearMsg:
 		m.errMsg = ""
 
+	case exitNodeResultMsg:
+		if msg.err != nil {
+			m.errMsg = "exit node: " + msg.err.Error()
+			cmds = append(cmds, clearStatusCmd())
+		}
+		cmds = append(cmds, m.fetchPeersCmd())
+
 	case ssh.SSHErrorMsg:
 		m.errMsg = msg.Err.Error()
 		cmds = append(cmds, clearStatusCmd())
@@ -198,7 +205,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Copy):
 			if p := m.selectedPeer(); p != nil {
-				copyToClipboard(p.TailscaleIP)
+				addr := p.TailscaleIP
+				if p.DNSName != "" {
+					addr = p.DNSName
+				}
+				copyToClipboard(addr)
+			}
+
+		case key.Matches(msg, m.keys.ExitNode):
+			if p := m.selectedPeer(); p != nil && p.CanBeExitNode && !p.IsSelf {
+				cmds = append(cmds, m.toggleExitNodeCmd(p))
 			}
 
 		case key.Matches(msg, m.keys.Refresh):
@@ -319,6 +335,10 @@ func (m Model) selectedPeer() *tailscale.Peer {
 }
 
 func (m Model) refreshDetail() Model {
+	if len(m.peers) == 0 && m.errMsg != "" {
+		m.viewport.SetContent(ui.RenderNoTailscale(m.errMsg, m.viewport.Width))
+		return m
+	}
 	peer := tailscale.Peer{}
 	if p := m.selectedPeer(); p != nil {
 		peer = *p
@@ -532,6 +552,20 @@ func (m Model) pingCmd(ip string) tea.Cmd {
 	return func() tea.Msg {
 		result := ping.Ping(ip)
 		return pingResultMsg{peerIP: result.PeerIP, latency: result.Latency}
+	}
+}
+
+func (m Model) toggleExitNodeCmd(p *tailscale.Peer) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// If this peer is already the exit node, clear it; otherwise set it.
+		id := p.StableNodeID
+		if p.IsExitNode {
+			id = ""
+		}
+		err := m.client.SetExitNode(ctx, id)
+		return exitNodeResultMsg{err: err}
 	}
 }
 
