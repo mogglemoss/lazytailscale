@@ -8,7 +8,7 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 ---
 
-![lazytailscale](./screenshot.png)
+![lazytailscale](./assets/lazytailscale.png)
 
 ## What It Does
 
