@@ -147,6 +147,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ssh.SSHDoneMsg:
 		// TUI already resumed — nothing to do.
 
+	case tea.MouseMsg:
+		if !m.sshPrompting {
+			m = m.handleMouse(msg, &cmds)
+		}
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -401,6 +406,96 @@ func (m Model) handleSSHPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sshInput, cmd = m.sshInput.Update(msg)
 		return m, cmd
 	}
+}
+
+// ── Mouse ─────────────────────────────────────────────────────────────────────
+
+// listPaneBoundary returns the x coordinate (exclusive) where the list pane ends.
+// Clicks strictly left of this value hit the list; at or right hit the detail pane.
+func (m Model) listPaneBoundary() int {
+	return listPaneWidth + 1 // +1 for the border character
+}
+
+func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
+	inListPane := msg.X < m.listPaneBoundary()
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if inListPane {
+			prevIdx := m.list.Index()
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			*cmds = append(*cmds, cmd)
+			if m.list.Index() != prevIdx {
+				m = m.refreshDetail()
+				if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging {
+					m.pinging = true
+					*cmds = append(*cmds, m.pingCmd(p.TailscaleIP))
+				}
+			}
+		} else {
+			m.viewport.LineUp(3)
+		}
+
+	case tea.MouseButtonWheelDown:
+		if inListPane {
+			prevIdx := m.list.Index()
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			*cmds = append(*cmds, cmd)
+			if m.list.Index() != prevIdx {
+				m = m.refreshDetail()
+				if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging {
+					m.pinging = true
+					*cmds = append(*cmds, m.pingCmd(p.TailscaleIP))
+				}
+			}
+		} else {
+			m.viewport.LineDown(3)
+		}
+
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionRelease || !inListPane {
+			break
+		}
+		// y=0 is the status bar, y=1 is the first list row.
+		row := msg.Y - 1
+		if row < 0 {
+			break
+		}
+		// Calculate which absolute peer index the clicked row maps to.
+		pageSize := m.bodyHeight()
+		page := m.list.Index() / pageSize
+		target := page*pageSize + row
+		if target < 0 {
+			target = 0
+		}
+		if target >= len(m.peers) {
+			target = len(m.peers) - 1
+		}
+		// Move cursor to target by sending the list enough Up/Down messages.
+		current := m.list.Index()
+		diff := target - current
+		keyType := tea.KeyDown
+		if diff < 0 {
+			keyType = tea.KeyUp
+			diff = -diff
+		}
+		for i := 0; i < diff; i++ {
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(tea.KeyMsg{Type: keyType})
+			*cmds = append(*cmds, cmd)
+		}
+		if m.list.Index() != current {
+			m = m.refreshDetail()
+			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging {
+				m.pinging = true
+				*cmds = append(*cmds, m.pingCmd(p.TailscaleIP))
+			}
+		}
+	}
+
+	return m
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
