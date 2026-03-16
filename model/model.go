@@ -458,8 +458,9 @@ func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
 		if msg.Action != tea.MouseActionRelease || !inListPane {
 			break
 		}
-		// y=0 is the status bar, y=1 is the first list row.
-		row := msg.Y - 1
+		// Mouse coords are 1-indexed; status bar occupies row 1.
+		// So first list item is at y=2 → row 0.
+		row := msg.Y - 2
 		if row < 0 {
 			break
 		}
