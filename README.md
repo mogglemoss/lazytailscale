@@ -16,15 +16,15 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 **Peer list**
 - All nodes on your tailnet, sorted online-first then alphabetically
-- Status dots: green (online), amber (seen < 5min), red (offline)
+- Status dots: green (online) · amber (seen < 5 min) · red (offline)
 - Exit node and subnet router indicators
-- Live node count and filter-aware paginator
+- Live node count with filter-aware paginator
 
 **Per-peer detail**
 - Tailscale IP and MagicDNS name
 - Connection type: `◈ direct` (peer-to-peer) or `◌ relayed` (via DERP relay)
 - OS, last contact, last WireGuard handshake
-- Exit node status with one-key toggle
+- Exit node status with one-key toggle (`e`)
 - Advertised subnet routes
 - ACL tags
 - Key expiry warning when ≤ 14 days remaining
@@ -35,9 +35,13 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 - Color-coded: green < 10ms · amber < 50ms · red ≥ 50ms · `✕` for failed
 
 **SSH**
-- `enter` suspends the TUI, hands off the terminal, resumes on exit
-- Username prompt pre-filled with your local username, remembers per-host across the session
+- `enter` suspends the TUI, hands off the terminal to SSH, resumes on exit
+- Username prompt pre-filled with your local user, remembers per-host for the session
 - MagicDNS name used when available, IP as fallback
+
+**Connection control**
+- Connect and disconnect Tailscale from within the TUI (`u`)
+- Status bar reflects current node state: NODE NOMINAL · NODE UNREACHABLE · DISCONNECTED
 
 **Notifications**
 - Status bar briefly notes when a peer connects or disconnects between polls
@@ -49,7 +53,7 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 **Demo mode**
 - `--demo` runs with a fictional tailnet — no Tailscale installation required
-- Useful for screenshots, testing, and kicking the tyres before committing
+- Useful for screenshots, testing, or trying it out before committing
 
 ---
 
