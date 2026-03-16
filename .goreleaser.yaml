@@ -49,6 +49,7 @@ brews:
       owner: mogglemoss
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
     homepage: "https://github.com/mogglemoss/lazytailscale"
     description: "A terminal dashboard for your Tailscale network"
     license: "MIT"
