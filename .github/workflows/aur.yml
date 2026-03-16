@@ -16,7 +16,13 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-          curl -sL "https://github.com/mogglemoss/lazytailscale/releases/download/${GITHUB_REF_NAME}/checksums.txt" -o checksums.txt
+          # Wait for GoReleaser to finish uploading assets (up to 5 minutes).
+          for i in $(seq 1 10); do
+            curl -sf "https://github.com/mogglemoss/lazytailscale/releases/download/${GITHUB_REF_NAME}/checksums.txt" -o checksums.txt && break
+            echo "Waiting for release assets... ($i/10)"
+            sleep 30
+          done
+
           echo "amd64=$(grep linux_amd64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
           echo "arm64=$(grep linux_arm64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
 
