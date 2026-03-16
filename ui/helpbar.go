@@ -15,8 +15,8 @@ type helpItem struct {
 var shortHelp = []helpItem{
 	{"↑/k↓/j", "navigate"},
 	{"enter", "ssh"},
-	{"p", "ping"},
 	{"e", "exit node"},
+	{"u", "connect/disconnect"},
 	{"c", "copy"},
 	{"/", "filter"},
 	{"?", "more"},
@@ -29,6 +29,7 @@ var fullHelp = []helpItem{
 	{"enter", "ssh into node"},
 	{"p", "ping selected node"},
 	{"e", "toggle exit node"},
+	{"u", "connect / disconnect tailscale"},
 	{"r", "toggle subnet routes"},
 	{"c", "copy address (dns preferred)"},
 	{"/", "filter node list"},

@@ -88,6 +88,7 @@ Requires `tailscaled` running locally. On Linux the process must have access to 
 | `↓` / `j` | Next node |
 | `enter` | SSH into selected node |
 | `e` | Toggle exit node on / off |
+| `u` | Connect / disconnect Tailscale |
 | `p` | Ping selected node now |
 | `r` | Toggle subnet routes |
 | `c` | Copy address to clipboard (MagicDNS preferred) |

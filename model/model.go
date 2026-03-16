@@ -151,6 +151,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.fetchPeersCmd())
 
+	case connectionResultMsg:
+		if msg.err != nil {
+			m.errMsg = "connection: " + msg.err.Error()
+			cmds = append(cmds, clearStatusCmd())
+		}
+		cmds = append(cmds, m.fetchPeersCmd())
+
 	case ssh.SSHErrorMsg:
 		m.errMsg = msg.Err.Error()
 		cmds = append(cmds, clearStatusCmd())
@@ -220,6 +227,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if p := m.selectedPeer(); p != nil && p.CanBeExitNode && !p.IsSelf {
 				cmds = append(cmds, m.toggleExitNodeCmd(p))
 			}
+
+		case key.Matches(msg, m.keys.Connection):
+			cmds = append(cmds, m.toggleConnectionCmd())
 
 		case key.Matches(msg, m.keys.Refresh):
 			cmds = append(cmds, m.fetchPeersCmd())
@@ -576,6 +586,15 @@ func (m Model) pingCmd(ip string) tea.Cmd {
 	return func() tea.Msg {
 		result := ping.Ping(ip)
 		return pingResultMsg{peerIP: result.PeerIP, latency: result.Latency}
+	}
+}
+
+func (m Model) toggleConnectionCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := m.client.ToggleConnection(ctx, m.info.Stopped)
+		return connectionResultMsg{err: err}
 	}
 }
 

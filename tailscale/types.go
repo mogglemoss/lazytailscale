@@ -37,6 +37,7 @@ type NetworkInfo struct {
 	SelfIP       string
 	SelfName     string
 	Online       bool
-	TotalPeers   int // excludes self
-	OnlinePeers  int // excludes self
+	Stopped      bool // true when the user has explicitly disconnected (WantRunning=false)
+	TotalPeers   int  // excludes self
+	OnlinePeers  int  // excludes self
 }

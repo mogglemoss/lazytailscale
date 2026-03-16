@@ -60,6 +60,7 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 
 	info := NetworkInfo{
 		NetworkName: st.MagicDNSSuffix,
+		Stopped:     st.BackendState == "Stopped",
 	}
 	if st.Self != nil {
 		info.SelfName = st.Self.HostName
@@ -83,6 +84,18 @@ func (c *Client) FetchStatus(ctx context.Context) ([]Peer, NetworkInfo, error) {
 	}
 
 	return peers, info, nil
+}
+
+// ToggleConnection connects or disconnects the local node by flipping WantRunning.
+func (c *Client) ToggleConnection(ctx context.Context, wantRunning bool) error {
+	if c.demo {
+		return nil
+	}
+	_, err := c.lc.EditPrefs(ctx, &ipn.MaskedPrefs{
+		WantRunningSet: true,
+		Prefs:          ipn.Prefs{WantRunning: wantRunning},
+	})
+	return err
 }
 
 // SetExitNode sets the given peer as the exit node, or clears it if stableID is empty.

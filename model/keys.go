@@ -4,17 +4,18 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all key bindings for lazytailscale.
 type KeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	SSH      key.Binding
-	Ping     key.Binding
-	Routes   key.Binding
-	Copy     key.Binding
-	ExitNode key.Binding
-	Filter   key.Binding
-	Refresh  key.Binding
-	Help     key.Binding
-	Quit     key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	SSH        key.Binding
+	Ping       key.Binding
+	Routes     key.Binding
+	Copy       key.Binding
+	ExitNode   key.Binding
+	Connection key.Binding
+	Filter     key.Binding
+	Refresh    key.Binding
+	Help       key.Binding
+	Quit       key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings.
@@ -47,6 +48,10 @@ func DefaultKeyMap() KeyMap {
 		ExitNode: key.NewBinding(
 			key.WithKeys("e"),
 			key.WithHelp("e", "toggle exit node"),
+		),
+		Connection: key.NewBinding(
+			key.WithKeys("u"),
+			key.WithHelp("u", "connect/disconnect"),
 		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),

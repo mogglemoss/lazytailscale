@@ -30,5 +30,8 @@ type statusClearMsg struct{}
 // exitNodeResultMsg carries the result of a SetExitNode call.
 type exitNodeResultMsg struct{ err error }
 
+// connectionResultMsg carries the result of a ToggleConnection call.
+type connectionResultMsg struct{ err error }
+
 // mascotTickMsg fires on the mascot animation interval (600ms).
 type mascotTickMsg time.Time

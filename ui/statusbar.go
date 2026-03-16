@@ -16,6 +16,8 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame
 	var networkPart string
 	if errMsg != "" {
 		networkPart = S.StatusOffline.Render(errMsg)
+	} else if info.Stopped {
+		networkPart = S.StatusOffline.Render("● DISCONNECTED  ·  u to reconnect")
 	} else if info.NetworkName != "" {
 		dot := onlineDot(info.Online)
 		status := "NOMINAL"
