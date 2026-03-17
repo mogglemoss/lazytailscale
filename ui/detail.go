@@ -72,32 +72,26 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 
 	var b strings.Builder
 
-	// ── Header (with inline creature for self node) ───────────────────────
+	// ── Header — creature always visible in top-right corner ─────────────
 	heading := peer.Hostname
 	if peer.IsSelf {
 		heading += "  " + S.DetailLabel.Render("(this device)")
 	}
 
+	subtitle := S.DetailLabel.Render(peer.TailscaleIP)
+	if peer.DNSName != "" {
+		subtitle += S.DetailLabel.Render("  ·  " + peer.DNSName)
+	}
+
+	b.WriteString(renderHeaderWithCreature(
+		S.DetailHeader.Render(heading),
+		subtitle,
+		width, mascotFrame, mascotState,
+	))
+	b.WriteString("\n")
+
+	// ── Self-node body ────────────────────────────────────────────────────
 	if peer.IsSelf {
-		// Render heading + IP line alongside the creature (right-aligned).
-		creature := CreatureLines(mascotFrame, mascotState)
-		leftWidth := width - creatureVisibleWidth - 1
-		if leftWidth < 1 {
-			leftWidth = 1
-		}
-
-		headerLines := [3]string{
-			S.DetailHeader.Render(heading),
-			S.DetailLabel.Render(peer.TailscaleIP + "  ·  " + peer.DNSName),
-			"",
-		}
-		for i := 0; i < 3; i++ {
-			left := lipgloss.NewStyle().Width(leftWidth).Render(headerLines[i])
-			b.WriteString(left + creature[i] + "\n")
-		}
-		b.WriteString("\n")
-
-		// ── Network substrate stats ──────────────────────────────────────────
 		b.WriteString(S.DetailSection.Render("NODE RECORD"))
 		b.WriteString("\n")
 		b.WriteString(metaRow("PLATFORM", peer.OS))
@@ -118,15 +112,6 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 		b.WriteString(S.DetailLabel.Render("  network substrate nominal. this assessment is considered final."))
 		return b.String()
 	}
-
-	// ── Non-self header ───────────────────────────────────────────────────
-	b.WriteString(S.DetailHeader.Render(heading))
-	b.WriteString("\n")
-	b.WriteString(S.DetailLabel.Render(peer.TailscaleIP))
-	if peer.DNSName != "" {
-		b.WriteString(S.DetailLabel.Render("  ·  " + peer.DNSName))
-	}
-	b.WriteString("\n\n")
 
 	// ── Connection (online peers only) ────────────────────────────────────
 	if peer.Online {
@@ -364,4 +349,23 @@ func sparkColorFor(d time.Duration) lipgloss.Style {
 	default:
 		return S.SparkBad
 	}
+}
+
+// renderHeaderWithCreature renders a 2-line header (heading + subtitle) with
+// the animated creature pinned to the top-right corner. Used for all peers so
+// the mascot is always visible regardless of which node is selected.
+func renderHeaderWithCreature(heading, subtitle string, width, mascotFrame int, state MascotState) string {
+	creature := CreatureLines(mascotFrame, state)
+	leftWidth := width - creatureVisibleWidth - 1
+	if leftWidth < 1 {
+		leftWidth = 1
+	}
+
+	lines := [3]string{heading, subtitle, ""}
+	var b strings.Builder
+	for i := 0; i < 3; i++ {
+		left := lipgloss.NewStyle().Width(leftWidth).Render(lines[i])
+		b.WriteString(left + creature[i] + "\n")
+	}
+	return b.String()
 }
