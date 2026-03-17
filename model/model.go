@@ -15,12 +15,16 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
+	"regexp"
+	"strconv"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -53,12 +57,13 @@ type Model struct {
 	ready       bool
 	mascotFrame int
 
-	// SSH prompt state
-	sshPrompting bool
-	sshTarget    tailscale.Peer
-	sshInput     textinput.Model
-	sshUsernames map[string]string // hostname → last used username (persisted across sessions)
-	defaultUser  string            // local system username
+	// SSH form state (Huh form replacing the old textinput prompt)
+	sshForm       *huh.Form
+	sshFormValues *sshFormState
+	sshTarget     tailscale.Peer
+	sshUsernames  map[string]string // hostname → last used username (persisted)
+	sshPorts      map[string]string // hostname → last used port (persisted)
+	defaultUser   string            // local system username
 
 	// Connect popup state (shown when Enter is pressed on a peer)
 	connectPopup  bool
@@ -87,6 +92,7 @@ func New(demo bool) Model {
 		spinner:      sp,
 		defaultUser:  defaultUser,
 		sshUsernames: config.LoadUsernames(),
+		sshPorts:     config.LoadPorts(),
 		flashPeers:   make(map[string]bool),
 	}
 }
@@ -105,6 +111,32 @@ func (m Model) Init() tea.Cmd {
 // Update handles all incoming messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// SSH form intercepts all messages while active.
+	if m.sshForm != nil {
+		// Window resize must be handled even during form use.
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			m.width = ws.Width
+			m.height = ws.Height
+			m = m.recalcLayout()
+			m.ready = true
+			return m, nil
+		}
+		// ctrl+c always quits.
+		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		f, cmd := m.sshForm.Update(msg)
+		m.sshForm = f.(*huh.Form)
+		switch m.sshForm.State {
+		case huh.StateCompleted:
+			return m.launchSSHFromForm()
+		case huh.StateAborted:
+			m.sshForm = nil
+			m.sshFormValues = nil
+		}
+		return m, cmd
+	}
 
 	switch msg := msg.(type) {
 
@@ -202,7 +234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// VNC viewer launched in background — nothing to do.
 
 	case tea.MouseMsg:
-		if !m.sshPrompting && !m.connectPopup {
+		if m.sshForm == nil && !m.connectPopup {
 			m = m.handleMouse(msg, &cmds)
 		}
 
@@ -215,11 +247,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Connect popup intercepts all keys while active.
 		if m.connectPopup {
 			return m.handleConnectPopupKey(msg)
-		}
-
-		// SSH prompt intercepts all keys while active.
-		if m.sshPrompting {
-			return m.handleSSHPromptKey(msg)
 		}
 
 		// While filtering, forward all keys to the list.
@@ -327,12 +354,8 @@ func (m Model) View() string {
 	switch {
 	case m.connectPopup:
 		helpBar = ui.RenderConnectPopup(m.width, m.connectTarget.Hostname, m.connectTarget.OS)
-	case m.sshPrompting:
-		host := m.sshTarget.DNSName
-		if host == "" {
-			host = m.sshTarget.TailscaleIP
-		}
-		helpBar = ui.RenderSSHPrompt(m.sshTarget.Hostname, host, m.sshTarget.OS, m.sshInput, m.width)
+	case m.sshForm != nil:
+		helpBar = ui.RenderSSHFormHint(m.width)
 	default:
 		helpBar = ui.RenderHelpBar(m.width, m.showHelp)
 	}
@@ -342,7 +365,16 @@ func (m Model) View() string {
 		Height(m.bodyHeight()).
 		Render(m.list.View())
 
-	detailView := m.viewport.View()
+	var detailView string
+	if m.sshForm != nil {
+		header := "\n" + ui.S.DetailHeader.Render("  ssh into "+m.sshTarget.Hostname) + "\n\n"
+		detailView = lipgloss.NewStyle().
+			Width(m.detailWidth()).
+			Height(m.bodyHeight()).
+			Render(header + m.sshForm.View())
+	} else {
+		detailView = m.viewport.View()
+	}
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
 
@@ -488,7 +520,9 @@ func (m Model) handleConnectPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.connectPopup = false
 	switch msg.String() {
 	case "s", "enter":
-		m = m.enterSSHPrompt(m.connectTarget)
+		var cmd tea.Cmd
+		m, cmd = m.enterSSHForm(m.connectTarget)
+		return m, cmd
 	case "r":
 		return m, rdp.Launch(m.connectTarget.TailscaleIP)
 	case "v":
@@ -498,57 +532,76 @@ func (m Model) handleConnectPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// ── SSH prompt ───────────────────────────────────────────────────────────────
+// ── SSH form (Huh) ───────────────────────────────────────────────────────────
 
-func (m Model) enterSSHPrompt(peer tailscale.Peer) Model {
-	m.sshTarget = peer
-	m.sshPrompting = true
-
-	// Pre-fill with last used username for this host, or local default.
-	prefill := m.defaultUser
-	if last, ok := m.sshUsernames[peer.Hostname]; ok {
-		prefill = last
-	}
-
-	ti := textinput.New()
-	ti.SetValue(prefill)
-	// Select all so the user can immediately type to replace.
-	ti.CursorEnd()
-	ti.Width = 20
-	ti.Prompt = ""
-	ti.TextStyle = ui.S.DetailValue
-	ti.Cursor.Style = ui.S.StatusLogo
-	ti.Focus()
-
-	m.sshInput = ti
-	return m
+// sshFormState holds the bound values Huh writes into as the user types.
+// Stored as a pointer so the values survive model copies (value receiver pattern).
+type sshFormState struct {
+	username string
+	port     string
 }
 
-func (m Model) handleSSHPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		username := strings.TrimSpace(m.sshInput.Value())
-		if username == "" {
-			username = m.defaultUser
-		}
-		m.sshUsernames[m.sshTarget.Hostname] = username
-		config.SaveUsernames(m.sshUsernames)
-		m.sshPrompting = false
-		host := m.sshTarget.DNSName
-		if host == "" {
-			host = m.sshTarget.TailscaleIP
-		}
-		return m, ssh.Launch(username, host)
+var sshUsernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.\-]+$`)
 
-	case "esc", "ctrl+c":
-		m.sshPrompting = false
-		return m, nil
-
-	default:
-		var cmd tea.Cmd
-		m.sshInput, cmd = m.sshInput.Update(msg)
-		return m, cmd
+func (m Model) enterSSHForm(peer tailscale.Peer) (Model, tea.Cmd) {
+	username := m.defaultUser
+	if last, ok := m.sshUsernames[peer.Hostname]; ok {
+		username = last
 	}
+	port := "22"
+	if last, ok := m.sshPorts[peer.Hostname]; ok {
+		port = last
+	}
+
+	values := &sshFormState{username: username, port: port}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Username").
+				Value(&values.username).
+				Validate(func(s string) error {
+					if !sshUsernameRe.MatchString(s) {
+						return fmt.Errorf("letters, numbers, - _ . only")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Port").
+				Value(&values.port).
+				Validate(func(s string) error {
+					n, err := strconv.Atoi(s)
+					if err != nil || n < 1 || n > 65535 {
+						return fmt.Errorf("must be 1–65535")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(huh.ThemeCharm()).WithWidth(m.detailWidth() - 4)
+
+	m.sshForm = form
+	m.sshFormValues = values
+	m.sshTarget = peer
+	return m, form.Init()
+}
+
+func (m Model) launchSSHFromForm() (tea.Model, tea.Cmd) {
+	username := m.sshFormValues.username
+	port := m.sshFormValues.port
+
+	m.sshUsernames[m.sshTarget.Hostname] = username
+	m.sshPorts[m.sshTarget.Hostname] = port
+	config.SaveUsernames(m.sshUsernames)
+	config.SavePorts(m.sshPorts)
+
+	m.sshForm = nil
+	m.sshFormValues = nil
+
+	host := m.sshTarget.DNSName
+	if host == "" {
+		host = m.sshTarget.TailscaleIP
+	}
+	return m, ssh.Launch(username, host, port)
 }
 
 // ── Mouse ─────────────────────────────────────────────────────────────────────

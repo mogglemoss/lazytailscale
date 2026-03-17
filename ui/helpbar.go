@@ -3,7 +3,6 @@ package ui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -66,24 +65,12 @@ func RenderConnectPopup(width int, peerHostname, peerOS string) string {
 		Render(bar)
 }
 
-// RenderSSHPrompt renders the SSH username prompt, replacing the help bar.
-func RenderSSHPrompt(hostname, host, os string, input textinput.Model, width int) string {
+// RenderSSHFormHint renders the help bar while the SSH Huh form is active.
+func RenderSSHFormHint(width int) string {
 	sep := S.HelpSep.Render("  ·  ")
-
-	peer := S.DetailHeader.Render(hostname)
-	addr := S.DetailLabel.Render(host)
-
-	var note string
-	if strings.ToLower(os) == "windows" {
-		note = sep + S.ListDotIdle.Render("rdp may be more appropriate")
-	}
-
-	left := S.HelpKey.Render("ssh") + " " + peer + "  " + addr + note
-	mid := "  " + S.HelpKey.Render("as:") + " " + input.View()
-	right := sep + S.HelpKey.Render("enter") + S.HelpDesc.Render(" connect") +
+	bar := S.HelpKey.Render("tab") + S.HelpDesc.Render(" next field") +
+		sep + S.HelpKey.Render("enter") + S.HelpDesc.Render(" connect") +
 		sep + S.HelpKey.Render("esc") + S.HelpDesc.Render(" cancel")
-
-	bar := left + mid + right
 	return lipgloss.NewStyle().
 		Width(width).
 		Foreground(S.T.TextSecondary).
