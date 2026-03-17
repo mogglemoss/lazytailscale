@@ -15,7 +15,8 @@ import (
 
 // PeerItem wraps a tailscale.Peer so it implements list.Item.
 type PeerItem struct {
-	Peer tailscale.Peer
+	Peer     tailscale.Peer
+	Flashing bool // briefly true when the peer's online state just changed
 }
 
 func (p PeerItem) FilterValue() string { return p.Peer.Hostname }
@@ -90,9 +91,12 @@ func (d PeerDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	tagStr := S.ListTag.Render(tag + strings.Repeat(" ", tagPad))
 
 	var hostnameStr string
-	if selected {
+	switch {
+	case selected:
 		hostnameStr = S.ListItemSelected.Render(hostname)
-	} else {
+	case pi.Flashing:
+		hostnameStr = S.PopupSelected.Render(hostname)
+	default:
 		hostnameStr = S.ListItem.Render(hostname)
 	}
 
@@ -147,7 +151,7 @@ func truncate(s string, max int) string {
 
 // NewPeerList returns a configured bubbles list.Model for the peer pane.
 func NewPeerList(peers []tailscale.Peer, height int) list.Model {
-	items := PeersToItems(peers)
+	items := PeersToItems(peers, nil)
 
 	l := list.New(items, PeerDelegate{}, listWidth, height)
 	l.SetShowTitle(false)
@@ -168,10 +172,11 @@ func NewPeerList(peers []tailscale.Peer, height int) list.Model {
 }
 
 // PeersToItems converts a peer slice to list items.
-func PeersToItems(peers []tailscale.Peer) []list.Item {
+// flashPeers is an optional set of hostnames that should briefly flash their row.
+func PeersToItems(peers []tailscale.Peer, flashPeers map[string]bool) []list.Item {
 	items := make([]list.Item, len(peers))
 	for i, p := range peers {
-		items[i] = PeerItem{Peer: p}
+		items[i] = PeerItem{Peer: p, Flashing: flashPeers[p.Hostname]}
 	}
 	return items
 }

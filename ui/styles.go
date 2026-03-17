@@ -148,6 +148,47 @@ func New(t Theme) Styles {
 	return s
 }
 
+// Presets is the map of named built-in themes selectable via --theme.
+var Presets = map[string]Theme{
+	"default": Default,
+	"catppuccin": {
+		Online:        lipgloss.Color("#a6e3a1"),
+		Idle:          lipgloss.Color("#f9e2af"),
+		Offline:       lipgloss.Color("#f38ba8"),
+		Unknown:       lipgloss.AdaptiveColor{Light: "#7c7f93", Dark: "#6c7086"},
+		Accent:        lipgloss.Color("#cba6f7"),
+		AccentSubtle:  lipgloss.AdaptiveColor{Light: "#1e66f5", Dark: "#89b4fa"},
+		Selected:      lipgloss.AdaptiveColor{Light: "#dce0e8", Dark: "#313244"},
+		Border:        lipgloss.AdaptiveColor{Light: "#bcc0cc", Dark: "#45475a"},
+		TextPrimary:   lipgloss.AdaptiveColor{Light: "#4c4f69", Dark: "#cdd6f4"},
+		TextSecondary: lipgloss.AdaptiveColor{Light: "#6c6f85", Dark: "#9399b2"},
+	},
+	"dracula": {
+		Online:        lipgloss.Color("#50fa7b"),
+		Idle:          lipgloss.Color("#f1fa8c"),
+		Offline:       lipgloss.Color("#ff5555"),
+		Unknown:       lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#6272a4"},
+		Accent:        lipgloss.Color("#bd93f9"),
+		AccentSubtle:  lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#8be9fd"},
+		Selected:      lipgloss.AdaptiveColor{Light: "#f8f8f2", Dark: "#44475a"},
+		Border:        lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#6272a4"},
+		TextPrimary:   lipgloss.AdaptiveColor{Light: "#282a36", Dark: "#f8f8f2"},
+		TextSecondary: lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#6272a4"},
+	},
+	"nord": {
+		Online:        lipgloss.Color("#a3be8c"),
+		Idle:          lipgloss.Color("#ebcb8b"),
+		Offline:       lipgloss.Color("#bf616a"),
+		Unknown:       lipgloss.AdaptiveColor{Light: "#7b88a1", Dark: "#4c566a"},
+		Accent:        lipgloss.Color("#88c0d0"),
+		AccentSubtle:  lipgloss.AdaptiveColor{Light: "#5e81ac", Dark: "#81a1c1"},
+		Selected:      lipgloss.AdaptiveColor{Light: "#e5e9f0", Dark: "#3b4252"},
+		Border:        lipgloss.AdaptiveColor{Light: "#d8dee9", Dark: "#4c566a"},
+		TextPrimary:   lipgloss.AdaptiveColor{Light: "#2e3440", Dark: "#eceff4"},
+		TextSecondary: lipgloss.AdaptiveColor{Light: "#4c566a", Dark: "#7b88a1"},
+	},
+}
+
 // S is the active styles singleton. Omarchy theme is used when detected,
 // falling back to the built-in Default.
 var S = initStyles()
@@ -157,4 +198,13 @@ func initStyles() Styles {
 		return New(theme)
 	}
 	return New(Default)
+}
+
+// SetTheme applies a named preset theme, overriding Omarchy detection.
+// Call this before model.New() so all rendered styles use the new theme.
+// Unknown names are silently ignored.
+func SetTheme(name string) {
+	if t, ok := Presets[name]; ok {
+		S = New(t)
+	}
 }

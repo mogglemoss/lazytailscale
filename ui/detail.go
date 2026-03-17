@@ -65,7 +65,7 @@ func RenderNoTailscale(errMsg string, width int) string {
 }
 
 // RenderDetail returns the full content string for the detail viewport.
-func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bool, width int, mascotFrame int) string {
+func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bool, width int, mascotFrame int, mascotState MascotState, pingFlash bool) string {
 	if peer.Hostname == "" {
 		return S.DetailLabel.Render("\n  No peer selected")
 	}
@@ -80,7 +80,7 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 
 	if peer.IsSelf {
 		// Render heading + IP line alongside the creature (right-aligned).
-		creature := CreatureLines(mascotFrame)
+		creature := CreatureLines(mascotFrame, mascotState)
 		leftWidth := width - creatureVisibleWidth - 1
 		if leftWidth < 1 {
 			leftWidth = 1
@@ -164,7 +164,11 @@ func RenderDetail(peer tailscale.Peer, info tailscale.NetworkInfo, showRoutes bo
 	// ── Latency Assessment ───────────────────────────────────────────────────
 	b.WriteString(S.DetailSection.Render("LATENCY ASSESSMENT"))
 	b.WriteString("\n")
-	b.WriteString(renderSparkline(peer.PingHistory))
+	spark := renderSparkline(peer.PingHistory)
+	if pingFlash {
+		spark += S.StatusLogo.Render(" ✦")
+	}
+	b.WriteString(spark)
 	b.WriteString("\n")
 	b.WriteString(renderPingStats(peer.PingHistory))
 	b.WriteString("\n\n")

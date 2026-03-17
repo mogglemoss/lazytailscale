@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"github.com/mogglemoss/lazytailscale/config"
 	"github.com/mogglemoss/lazytailscale/ping"
 	"github.com/mogglemoss/lazytailscale/rdp"
 	"github.com/mogglemoss/lazytailscale/ssh"
@@ -56,12 +57,16 @@ type Model struct {
 	sshPrompting bool
 	sshTarget    tailscale.Peer
 	sshInput     textinput.Model
-	sshUsernames map[string]string // hostname → last used username (session)
+	sshUsernames map[string]string // hostname → last used username (persisted across sessions)
 	defaultUser  string            // local system username
 
 	// Connect popup state (shown when Enter is pressed on a peer)
 	connectPopup  bool
 	connectTarget tailscale.Peer
+
+	// Animation state
+	flashPeers map[string]bool // hostname → briefly highlight this row
+	pingFlash  bool            // briefly flash the sparkline after a ping result
 }
 
 // New creates and returns the initial model.
@@ -81,7 +86,8 @@ func New(demo bool) Model {
 		client:       tailscale.NewClient(demo),
 		spinner:      sp,
 		defaultUser:  defaultUser,
-		sshUsernames: make(map[string]string),
+		sshUsernames: config.LoadUsernames(),
+		flashPeers:   make(map[string]bool),
 	}
 }
 
@@ -134,7 +140,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(notifCmds) == 0 {
 				m.errMsg = ""
 			}
-			m.list.SetItems(ui.PeersToItems(m.peers))
+			m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
 			m = m.refreshDetail()
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging && len(p.PingHistory) == 0 {
 				m.pinging = true
@@ -145,7 +151,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pingResultMsg:
 		m.pinging = false
 		m = m.applyPingResult(msg)
+		m.pingFlash = true
+		cmds = append(cmds, pingFlashClearCmd())
 		m = m.refreshDetail()
+
+	case pingFlashClearMsg:
+		m.pingFlash = false
+		m = m.refreshDetail()
+
+	case peerFlashClearMsg:
+		delete(m.flashPeers, msg.hostname)
+		m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
 
 	case statusClearMsg:
 		m.errMsg = ""
@@ -288,13 +304,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// mascotState derives the current mascot animation state from model state.
+func (m Model) mascotState() ui.MascotState {
+	if m.info.Stopped || (!m.info.Online && m.info.NetworkName != "") {
+		return ui.MascotOffline
+	}
+	if m.pinging {
+		return ui.MascotPinging
+	}
+	return ui.MascotNormal
+}
+
 // View renders the full TUI.
 func (m Model) View() string {
 	if !m.ready {
 		return "\n  " + m.spinner.View() + " Loading…\n"
 	}
 
-	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame)
+	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame, m.mascotState())
 
 	var helpBar string
 	switch {
@@ -385,7 +412,7 @@ func (m Model) refreshDetail() Model {
 	if p := m.selectedPeer(); p != nil {
 		peer = *p
 	}
-	m.viewport.SetContent(ui.RenderDetail(peer, m.info, m.showRoutes, m.viewport.Width, m.mascotFrame))
+	m.viewport.SetContent(ui.RenderDetail(peer, m.info, m.showRoutes, m.viewport.Width, m.mascotFrame, m.mascotState(), m.pingFlash))
 	return m
 }
 
@@ -403,12 +430,21 @@ func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (M
 		prevMap[p.TailscaleIP] = prev{online: p.Online, hist: p.PingHistory, seen: true}
 	}
 
+	// Find active exit node.
+	m.info.ActiveExitNode = ""
+	for i := range fresh {
+		if fresh[i].IsExitNode {
+			m.info.ActiveExitNode = fresh[i].Hostname
+			break
+		}
+	}
+
 	var cmds []tea.Cmd
 	for i := range fresh {
 		ip := fresh[i].TailscaleIP
 		if p, ok := prevMap[ip]; ok {
 			fresh[i].PingHistory = p.hist
-			// Notify on status transitions for non-self peers.
+			// Notify and flash on status transitions for non-self peers.
 			if p.seen && !fresh[i].IsSelf && fresh[i].Online != p.online {
 				name := fresh[i].Hostname
 				if fresh[i].Online {
@@ -417,6 +453,8 @@ func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (M
 					m.errMsg = name + " disconnected"
 				}
 				cmds = append(cmds, clearStatusCmd())
+				m.flashPeers[name] = true
+				cmds = append(cmds, peerFlashClearCmd(name))
 			}
 		}
 	}
@@ -494,6 +532,7 @@ func (m Model) handleSSHPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			username = m.defaultUser
 		}
 		m.sshUsernames[m.sshTarget.Hostname] = username
+		config.SaveUsernames(m.sshUsernames)
 		m.sshPrompting = false
 		host := m.sshTarget.DNSName
 		if host == "" {
@@ -666,6 +705,18 @@ func (m Model) toggleExitNodeCmd(p *tailscale.Peer) tea.Cmd {
 func clearStatusCmd() tea.Cmd {
 	return tea.Tick(statusClearDelay, func(_ time.Time) tea.Msg {
 		return statusClearMsg{}
+	})
+}
+
+func pingFlashClearCmd() tea.Cmd {
+	return tea.Tick(300*time.Millisecond, func(_ time.Time) tea.Msg {
+		return pingFlashClearMsg{}
+	})
+}
+
+func peerFlashClearCmd(hostname string) tea.Cmd {
+	return tea.Tick(800*time.Millisecond, func(_ time.Time) tea.Msg {
+		return peerFlashClearMsg{hostname: hostname}
 	})
 }
 

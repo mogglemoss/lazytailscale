@@ -36,6 +36,12 @@ type connectionResultMsg struct{ err error }
 // mascotTickMsg fires on the mascot animation interval (600ms).
 type mascotTickMsg time.Time
 
+// pingFlashClearMsg clears the sparkline flash indicator after it fires.
+type pingFlashClearMsg struct{}
+
+// peerFlashClearMsg clears the flash highlight on a specific peer row.
+type peerFlashClearMsg struct{ hostname string }
+
 // rdpDoneMsg is sent when an RDP client launches successfully.
 type rdpDoneMsg struct{}
 

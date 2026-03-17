@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/mogglemoss/lazytailscale/model"
 	"github.com/mogglemoss/lazytailscale/server"
+	"github.com/mogglemoss/lazytailscale/ui"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,11 +20,16 @@ func main() {
 	serve := flag.Bool("serve", false, "serve the TUI over SSH using Wish")
 	port := flag.Int("port", 23234, "SSH server port (used with --serve)")
 	host := flag.String("host", "0.0.0.0", "SSH server bind address (used with --serve)")
+	theme := flag.String("theme", "", "color theme: default, catppuccin, dracula, nord")
 	flag.Parse()
 
 	if *ver {
 		fmt.Println(version)
 		os.Exit(0)
+	}
+
+	if *theme != "" {
+		ui.SetTheme(*theme)
 	}
 
 	if *serve {

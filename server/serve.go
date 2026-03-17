@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/activeterm"
@@ -53,8 +54,8 @@ func Start(host string, port int) error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	fmt.Fprintf(os.Stderr, "lazytailscale SSH server listening on %s\n", addr)
-	fmt.Fprintf(os.Stderr, "Connect with: ssh <this-host> -p %d\n", port)
+	log.Info("SSH server listening", "addr", addr)
+	log.Info("connect with", "cmd", fmt.Sprintf("ssh <this-host> -p %d", port))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -65,7 +66,7 @@ func Start(host string, port int) error {
 
 	select {
 	case <-done:
-		fmt.Fprintln(os.Stderr, "\nShutting down SSH server…")
+		log.Info("shutting down SSH server")
 	case err := <-errCh:
 		return fmt.Errorf("server error: %w", err)
 	}

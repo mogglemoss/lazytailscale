@@ -8,9 +8,9 @@ import (
 )
 
 // RenderStatusBar renders the top status bar.
-func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame int) string {
-	// Logo with animated tail — one subtle character that blinks.
-	tail := StatusLogoTail(frame)
+func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame int, state MascotState) string {
+	// Logo with animated tail — reacts to mascot state.
+	tail := StatusLogoTail(frame, state)
 	logo := S.StatusLogo.Render("◈") + tail + S.StatusLogo.Render("lazytailscale")
 
 	var networkPart string
@@ -26,6 +26,13 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame
 		}
 		networkPart = S.StatusMeta.Render(fmt.Sprintf("%s · %s · %s %s",
 			info.NetworkName, info.SelfIP, dot, status))
+
+		// Exit node indicator — shown when routing traffic through a peer.
+		if info.ActiveExitNode != "" {
+			sep := S.StatusMeta.Render("  ·  ")
+			networkPart += sep + lipgloss.NewStyle().Foreground(S.T.Online).Render("⬡") +
+				S.StatusMeta.Render(" via "+info.ActiveExitNode)
+		}
 	} else {
 		networkPart = S.StatusMeta.Render("establishing substrate awareness…")
 	}
