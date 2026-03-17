@@ -1,2 +1,5 @@
 lazytailscale
+lazytailscale-linux-*
+lazytailscale-darwin-*
 .DS_Store
+.ssh/
