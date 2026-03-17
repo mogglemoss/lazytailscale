@@ -73,6 +73,10 @@ type Styles struct {
 
 	// Panel chrome
 	PanelBorder lipgloss.Style
+
+	// Connect popup
+	PopupSelected lipgloss.Style
+	PopupDim      lipgloss.Style
 }
 
 // New builds a Styles from the given Theme.
@@ -132,6 +136,14 @@ func New(t Theme) Styles {
 	s.PanelBorder = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(t.Border)
+
+	// Connect popup
+	s.PopupSelected = lipgloss.NewStyle().
+		Background(t.Selected).
+		Foreground(t.Accent).
+		Bold(true).
+		Padding(0, 1)
+	s.PopupDim = lipgloss.NewStyle().Foreground(t.Unknown)
 
 	return s
 }

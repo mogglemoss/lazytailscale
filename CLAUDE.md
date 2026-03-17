@@ -1,8 +1,9 @@
 # lazytailscale
 
 A terminal dashboard for your Tailscale network. Two-pane layout: peer list on
-the left, selected-peer detail on the right. Keyboard-driven, SSH-launchable,
-homelab-aware.
+the left, selected-peer detail on the right. Keyboard-driven, homelab-aware.
+Connect to peers via SSH, RDP, or VNC. Optionally serve the dashboard itself
+over SSH via `--serve` using Charm's Wish library.
 
 Built on the Charm stack: Bubbletea (Elm Architecture TUI framework), Bubbles
 (component library), Lipgloss (styling DSL). Single Go binary, no runtime deps.
@@ -14,6 +15,7 @@ Built on the Charm stack: Bubbletea (Elm Architecture TUI framework), Bubbles
 - **Components:** github.com/charmbracelet/bubbles (list, viewport, textinput, spinner)
 - **Styling:** github.com/charmbracelet/lipgloss
 - **Tailscale data:** tailscale.com/client/tailscale (LocalClient — no API key needed)
+- **SSH server:** github.com/charmbracelet/wish (Wish — serve TUI over SSH)
 - **Package manager:** Go modules (go mod)
 
 ## Project structure
@@ -23,7 +25,7 @@ lazytailscale/
 ├── CLAUDE.md
 ├── go.mod
 ├── go.sum
-├── main.go               # Entry point, tea.NewProgram
+├── main.go               # Entry point, tea.NewProgram; --serve/--port/--host flags
 ├── model/
 │   ├── model.go          # Root model: Init / Update / View
 │   ├── keys.go           # Keybindings (key.Binding)
@@ -32,15 +34,21 @@ lazytailscale/
 │   ├── peerlist.go       # Left pane: peer list component
 │   ├── detail.go         # Right pane: detail panel component
 │   ├── statusbar.go      # Top bar: network name, self IP, online status
-│   ├── helpbar.go        # Bottom bar: keybinding hints
+│   ├── helpbar.go        # Bottom bar: keybinding hints + connect popup + SSH prompt
 │   └── styles.go         # All lipgloss styles, single source of truth
 ├── tailscale/
 │   ├── client.go         # LocalClient wrapper, polling logic
 │   └── types.go          # Internal peer/network types (mapped from tstype)
 ├── ping/
 │   └── ping.go           # Async ping via tailscale ping, sparkline history
-└── ssh/
-    └── launch.go         # os/exec ssh into selected peer via Tailscale IP
+├── ssh/
+│   └── launch.go         # os/exec ssh into selected peer via Tailscale IP
+├── rdp/
+│   └── launch.go         # Platform RDP client launch (open/xfreerdp/remmina/mstsc)
+├── vnc/
+│   └── launch.go         # Platform VNC viewer launch (open/vncviewer/xdg-open)
+└── server/
+    └── serve.go          # Wish SSH server (--serve mode); one model per connection
 ```
 
 ## Architecture
@@ -64,6 +72,11 @@ peersLoadedMsg   → updates model.peers, triggers pingCmd for selected peer
 pingCmd          → returns pingResultMsg
 pingResultMsg    → updates sparkline ring buffer
 windowSizeMsg    → recalculates layout dimensions
+enter (on peer)  → connectPopup=true (shows picker in help bar area)
+  s/enter        → enterSSHPrompt → ssh.Launch → tea.ExecProcess
+  r              → rdp.Launch (background GUI process)
+  v              → vnc.Launch (background GUI process)
+  esc            → connectPopup=false
 ```
 
 ### Layout
@@ -77,7 +90,7 @@ windowSizeMsg    → recalculates layout dimensions
 │ ● cloud-machine    Mac   │                                     │
 │ ...                      │ routes / ports / ping sparkline     │
 ├──────────────────────────┴─────────────────────────────────────┤
-│ helpbar (1 line): ↑↓ navigate  enter ssh  p ping  r routes ... │
+│ helpbar (1 line): ↑↓ navigate  enter connect  p ping  r routes ... │
 ╰────────────────────────────────────────────────────────────────╯
 ```
 
@@ -144,7 +157,7 @@ the window. Color: green if avg < 10ms, amber < 50ms, red ≥ 50ms.
 |-----|--------|
 | `↑` / `k` | Previous peer |
 | `↓` / `j` | Next peer |
-| `enter` | SSH into selected peer (`ssh <tailscale-ip>`) |
+| `enter` | Open connection picker for selected peer |
 | `p` | Force ping selected peer now |
 | `r` | Toggle routes expanded view |
 | `c` | Copy selected peer's Tailscale IP to clipboard |
@@ -153,12 +166,32 @@ the window. Color: green if avg < 10ms, amber < 50ms, red ≥ 50ms.
 | `?` | Toggle full help |
 | `q` / `ctrl+c` | Quit |
 
-SSH launch (ssh/launch.go): `exec.Command("ssh", ip).Run()` with the program
-suspended via `tea.ExecProcess` so the terminal hands off cleanly and resumes
-lazytailscale on exit.
+### Connect popup (replaces help bar while open)
 
-Clipboard: use `golang.design/x/clipboard` or shell out to `pbcopy` / `xclip` /
-`wl-copy` depending on platform.
+`enter` on a non-self peer opens a picker rendered in the help bar area:
+
+```
+Connect to mollusk:  s ssh  ·  r rdp  ·  v vnc  ·  esc cancel
+```
+
+- `s` / `enter` — SSH: username prompt → `tea.ExecProcess` handoff
+- `r` — RDP: `open rdp://` (macOS), `xfreerdp`/`remmina` (Linux), `mstsc` (Windows); dimmed when target peer OS ≠ windows
+- `v` — VNC: `open vnc://` (macOS), `vncviewer`/`xdg-open` (Linux); credentials handled by viewer app
+- `esc` — dismiss
+
+No navigation state — one keypress fires immediately.
+
+### SSH server mode
+
+```bash
+./lazytailscale --serve [--port 23234] [--host 0.0.0.0]
+```
+
+Runs a Wish SSH server. Each connection gets an isolated `model.New(false)` instance
+talking to the local `tailscaled` socket. Host key auto-generated at `.ssh/id_ed25519`.
+Blocks until SIGINT/SIGTERM; graceful 30s shutdown.
+
+Clipboard: shells out to `pbcopy` / `xclip` / `wl-copy` depending on platform.
 
 ## Styling (styles.go)
 
@@ -236,15 +269,16 @@ buffer per peer. Do not ping all peers continuously — only the selected one.
   with message and retry hint, keep ticking
 - Ping timeout: record as 0ms / failed, render as `✕` in sparkline
 - SSH exec failure: show a one-line error in the status bar, clear after 3s
+- RDP/VNC launch failure (client not installed): show a one-line error in the status bar, clear after 3s
 
 ## Build & run
 
 ```bash
 go build -o lazytailscale .
-./lazytailscale
-
-# or
-go run .
+./lazytailscale              # normal TUI mode
+./lazytailscale --demo       # demo mode, no tailscaled required
+./lazytailscale --serve      # SSH server on 0.0.0.0:23234
+./lazytailscale --serve --port 2222 --host 127.0.0.1
 ```
 
 Requires tailscaled running locally. On Linux needs access to
@@ -258,3 +292,5 @@ session or with appropriate permissions.
 - ACL viewer
 - Exit node management
 - Multi-tailnet support
+- RDP/VNC username prompt (currently credentials handled entirely by the client app)
+- Taildrop / node sharing UI

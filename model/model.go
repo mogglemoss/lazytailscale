@@ -3,9 +3,11 @@ package model
 import (
 	"context"
 	"github.com/mogglemoss/lazytailscale/ping"
+	"github.com/mogglemoss/lazytailscale/rdp"
 	"github.com/mogglemoss/lazytailscale/ssh"
 	"github.com/mogglemoss/lazytailscale/tailscale"
 	"github.com/mogglemoss/lazytailscale/ui"
+	"github.com/mogglemoss/lazytailscale/vnc"
 	"os/exec"
 	"os/user"
 	"runtime"
@@ -56,6 +58,10 @@ type Model struct {
 	sshInput     textinput.Model
 	sshUsernames map[string]string // hostname → last used username (session)
 	defaultUser  string            // local system username
+
+	// Connect popup state (shown when Enter is pressed on a peer)
+	connectPopup  bool
+	connectTarget tailscale.Peer
 }
 
 // New creates and returns the initial model.
@@ -165,8 +171,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ssh.SSHDoneMsg:
 		// TUI already resumed — nothing to do.
 
+	case rdp.ErrMsg:
+		m.errMsg = "rdp: " + msg.Err.Error()
+		cmds = append(cmds, clearStatusCmd())
+
+	case rdp.DoneMsg:
+		// RDP client launched in background — nothing to do.
+
+	case vnc.ErrMsg:
+		m.errMsg = "vnc: " + msg.Err.Error()
+		cmds = append(cmds, clearStatusCmd())
+
+	case vnc.DoneMsg:
+		// VNC viewer launched in background — nothing to do.
+
 	case tea.MouseMsg:
-		if !m.sshPrompting {
+		if !m.sshPrompting && !m.connectPopup {
 			m = m.handleMouse(msg, &cmds)
 		}
 
@@ -176,6 +196,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
+		// Connect popup intercepts all keys while active.
+		if m.connectPopup {
+			return m.handleConnectPopupKey(msg)
+		}
+
 		// SSH prompt intercepts all keys while active.
 		if m.sshPrompting {
 			return m.handleSSHPromptKey(msg)
@@ -201,7 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.SSH):
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf {
-				m = m.enterSSHPrompt(*p)
+				m = m.enterConnectPopup(*p)
 			}
 
 		case key.Matches(msg, m.keys.Ping):
@@ -272,13 +297,16 @@ func (m Model) View() string {
 	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame)
 
 	var helpBar string
-	if m.sshPrompting {
+	switch {
+	case m.connectPopup:
+		helpBar = ui.RenderConnectPopup(m.width, m.connectTarget.Hostname, m.connectTarget.OS)
+	case m.sshPrompting:
 		host := m.sshTarget.DNSName
 		if host == "" {
 			host = m.sshTarget.TailscaleIP
 		}
 		helpBar = ui.RenderSSHPrompt(m.sshTarget.Hostname, host, m.sshTarget.OS, m.sshInput, m.width)
-	} else {
+	default:
 		helpBar = ui.RenderHelpBar(m.width, m.showHelp)
 	}
 
@@ -408,6 +436,28 @@ func (m Model) applyPingResult(msg pingResultMsg) Model {
 		}
 	}
 	return m
+}
+
+// ── Connect popup ────────────────────────────────────────────────────────────
+
+func (m Model) enterConnectPopup(peer tailscale.Peer) Model {
+	m.connectPopup = true
+	m.connectTarget = peer
+	return m
+}
+
+func (m Model) handleConnectPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.connectPopup = false
+	switch msg.String() {
+	case "s", "enter":
+		m = m.enterSSHPrompt(m.connectTarget)
+	case "r":
+		return m, rdp.Launch(m.connectTarget.TailscaleIP)
+	case "v":
+		return m, vnc.Launch(m.connectTarget.TailscaleIP)
+	// esc / ctrl+c — popup already closed above, nothing more to do
+	}
+	return m, nil
 }
 
 // ── SSH prompt ───────────────────────────────────────────────────────────────

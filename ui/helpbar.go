@@ -14,7 +14,7 @@ type helpItem struct {
 
 var shortHelp = []helpItem{
 	{"↑/k↓/j", "navigate"},
-	{"enter", "ssh"},
+	{"enter", "connect"},
 	{"e", "exit node"},
 	{"u", "connect/disconnect"},
 	{"c", "copy"},
@@ -26,7 +26,7 @@ var shortHelp = []helpItem{
 var fullHelp = []helpItem{
 	{"↑/k", "prev node"},
 	{"↓/j", "next node"},
-	{"enter", "ssh into node"},
+	{"enter", "connect to node"},
 	{"p", "ping selected node"},
 	{"e", "toggle exit node"},
 	{"u", "connect / disconnect tailscale"},
@@ -36,6 +36,34 @@ var fullHelp = []helpItem{
 	{"R", "refresh node list"},
 	{"?", "toggle help"},
 	{"q / ctrl+c", "quit"},
+}
+
+// RenderConnectPopup renders the connection type selector in place of the help bar.
+// Each option has a direct letter key — press it and the action fires immediately.
+// RDP is dimmed when the peer is not running Windows.
+func RenderConnectPopup(width int, peerHostname, peerOS string) string {
+	sep := S.HelpSep.Render("  ·  ")
+
+	label := S.HelpKey.Render("Connect to") + " " + S.DetailHeader.Render(peerHostname) + ":"
+
+	sshOpt := S.HelpKey.Render("s") + S.HelpDesc.Render(" ssh")
+
+	var rdpOpt string
+	if strings.EqualFold(peerOS, "windows") {
+		rdpOpt = S.HelpKey.Render("r") + S.HelpDesc.Render(" rdp")
+	} else {
+		rdpOpt = S.PopupDim.Render("r rdp")
+	}
+
+	vncOpt := S.HelpKey.Render("v") + S.HelpDesc.Render(" vnc")
+	cancel := S.HelpKey.Render("esc") + S.HelpDesc.Render(" cancel")
+
+	bar := label + "  " + sshOpt + sep + rdpOpt + sep + vncOpt + sep + cancel
+	return lipgloss.NewStyle().
+		Width(width).
+		Foreground(S.T.TextSecondary).
+		Padding(0, 1).
+		Render(bar)
 }
 
 // RenderSSHPrompt renders the SSH username prompt, replacing the help bar.

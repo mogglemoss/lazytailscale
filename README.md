@@ -34,10 +34,17 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 - Sparkline of last 8 results with avg / min / max
 - Color-coded: green < 10ms · amber < 50ms · red ≥ 50ms · `✕` for failed
 
-**SSH**
-- `enter` suspends the TUI, hands off the terminal to SSH, resumes on exit
-- Username prompt pre-filled with your local user, remembers per-host for the session
-- MagicDNS name used when available, IP as fallback
+**Connect**
+- `enter` opens a connection type picker: `s ssh · r rdp · v vnc · esc cancel`
+- **SSH** — suspends the TUI, hands off the terminal, resumes on exit; username prompt pre-filled with your local user, remembered per-host for the session; MagicDNS name used when available
+- **RDP** — opens the platform RDP client (`open rdp://` on macOS, `xfreerdp`/`remmina` on Linux, `mstsc` on Windows); dimmed when the target peer is not running Windows
+- **VNC** — opens the platform VNC viewer (`open vnc://` on macOS, `vncviewer`/`xdg-open` on Linux); credentials handled by the viewer app
+
+**SSH server mode**
+- `--serve` runs lazytailscale as a [Wish](https://github.com/charmbracelet/wish) SSH server — no client install needed
+- `ssh yourhost -p 23234` gives any user on your tailnet the full interactive dashboard
+- Each connection gets its own isolated session; the dashboard talks to the local `tailscaled` socket
+- `--port` and `--host` flags control the bind address (defaults: `0.0.0.0:23234`)
 
 **Connection control**
 - Connect and disconnect Tailscale from within the TUI (`u`)
@@ -98,11 +105,15 @@ Requires `tailscaled` running locally. On Linux the process must have access to 
 |-----|--------|
 | `↑` / `k` | Previous node |
 | `↓` / `j` | Next node |
-| `enter` | SSH into selected node |
+| `enter` | Open connection picker for selected node |
+| `s` | SSH (inside connection picker) |
+| `r` | RDP (inside connection picker, dimmed on non-Windows targets) |
+| `v` | VNC (inside connection picker) |
+| `esc` | Cancel / dismiss picker |
 | `e` | Toggle exit node on / off |
 | `u` | Connect / disconnect Tailscale |
 | `p` | Ping selected node now |
-| `r` | Toggle subnet routes |
+| `r` | Toggle subnet routes (normal mode) |
 | `c` | Copy address to clipboard (MagicDNS preferred) |
 | `/` | Filter peer list |
 | `R` | Refresh peer list |
@@ -122,6 +133,9 @@ Mouse: click to select · scroll wheel to navigate list or scroll detail pane.
 | Ping type | TSMP |
 | Ping history | 8 samples per node, ring buffer |
 | SSH | `tea.ExecProcess` · clean terminal handoff · no pty management |
+| RDP | `open rdp://` / `xfreerdp` / `remmina` / `mstsc` · detected at runtime |
+| VNC | `open vnc://` / `vncviewer` / `xdg-open` · detected at runtime |
+| SSH server | [Wish](https://github.com/charmbracelet/wish) · `--serve --port 23234` |
 | Clipboard | `pbcopy` / `xclip` / `wl-copy` · detected at runtime |
 | Theming | Omarchy auto-detected · built-in Charm Native fallback |
 | Runtime dependencies | None |

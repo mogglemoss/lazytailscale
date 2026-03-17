@@ -35,3 +35,15 @@ type connectionResultMsg struct{ err error }
 
 // mascotTickMsg fires on the mascot animation interval (600ms).
 type mascotTickMsg time.Time
+
+// rdpDoneMsg is sent when an RDP client launches successfully.
+type rdpDoneMsg struct{}
+
+// rdpErrorMsg is sent when an RDP client fails to launch.
+type rdpErrorMsg struct{ err error }
+
+// vncDoneMsg is sent when a VNC viewer launches successfully.
+type vncDoneMsg struct{}
+
+// vncErrorMsg is sent when a VNC viewer fails to launch.
+type vncErrorMsg struct{ err error }
