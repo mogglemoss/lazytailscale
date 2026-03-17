@@ -8,13 +8,15 @@ import (
 )
 
 // RenderStatusBar renders the top status bar.
-func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame int, state MascotState) string {
+func RenderStatusBar(info tailscale.NetworkInfo, errMsg, returnMsg string, width int, frame int, state MascotState, exitFlash, refreshFlash bool) string {
 	// Logo with animated tail — reacts to mascot state.
 	tail := StatusLogoTail(frame, state)
 	logo := S.StatusLogo.Render("◈") + tail + S.StatusLogo.Render("lazytailscale")
 
 	var networkPart string
-	if errMsg != "" {
+	if returnMsg != "" {
+		networkPart = S.ListDotOnline.Render("✦ ") + creatureBorderReturning.Render(returnMsg)
+	} else if errMsg != "" {
 		networkPart = S.StatusOffline.Render(errMsg)
 	} else if info.Stopped {
 		networkPart = S.StatusOffline.Render("● DISCONNECTED  ·  u to reconnect")
@@ -30,8 +32,20 @@ func RenderStatusBar(info tailscale.NetworkInfo, errMsg string, width int, frame
 		// Exit node indicator — shown when routing traffic through a peer.
 		if info.ActiveExitNode != "" {
 			sep := S.StatusMeta.Render("  ·  ")
-			networkPart += sep + lipgloss.NewStyle().Foreground(S.T.Online).Render("⬡") +
-				S.StatusMeta.Render(" via "+info.ActiveExitNode)
+			exitHex := lipgloss.NewStyle().Foreground(S.T.Online).Render("⬡")
+			if exitFlash {
+				exitHex = lipgloss.NewStyle().Foreground(S.T.Online).Bold(true).Render("⬡")
+			}
+			networkPart += sep + exitHex + S.StatusMeta.Render(" via "+info.ActiveExitNode)
+		} else if exitFlash {
+			// Just deactivated — show a brief ⬡ fade.
+			sep := S.StatusMeta.Render("  ·  ")
+			networkPart += sep + S.StatusMeta.Render("⬡ off")
+		}
+
+		// Refresh heartbeat — brief ◦ after a successful data fetch.
+		if refreshFlash {
+			networkPart += lipgloss.NewStyle().Foreground(S.T.Online).Render(" ◦")
 		}
 	} else {
 		networkPart = S.StatusMeta.Render("establishing substrate awareness…")

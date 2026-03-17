@@ -37,14 +37,11 @@ var fullHelp = []helpItem{
 	{"q / ctrl+c", "quit"},
 }
 
-// RenderConnectPopup renders the connection type selector in place of the help bar.
-// Each option has a direct letter key — press it and the action fires immediately.
-// RDP is dimmed when the peer is not running Windows.
-func RenderConnectPopup(width int, peerHostname, peerOS string) string {
+// RenderModalPickHint renders the help bar while the connection type modal is open.
+func RenderModalPickHint(width int, peerHostname, peerOS string) string {
 	sep := S.HelpSep.Render("  ·  ")
 
-	label := S.HelpKey.Render("Connect to") + " " + S.DetailHeader.Render(peerHostname) + ":"
-
+	label := S.HelpDesc.Render("connect to ") + S.DetailHeader.Render(peerHostname)
 	sshOpt := S.HelpKey.Render("s") + S.HelpDesc.Render(" ssh")
 
 	var rdpOpt string
@@ -65,12 +62,22 @@ func RenderConnectPopup(width int, peerHostname, peerOS string) string {
 		Render(bar)
 }
 
-// RenderSSHFormHint renders the help bar while the SSH Huh form is active.
-func RenderSSHFormHint(width int) string {
+// RenderModalDismissHint renders the help bar for panels that dismiss on any key.
+func RenderModalDismissHint(width int) string {
+	bar := S.HelpKey.Render("any key") + S.HelpDesc.Render("  continue")
+	return lipgloss.NewStyle().
+		Width(width).
+		Foreground(S.T.TextSecondary).
+		Padding(0, 1).
+		Render(bar)
+}
+
+// RenderModalSSHHint renders the help bar while the SSH credentials form is active.
+func RenderModalSSHHint(width int) string {
 	sep := S.HelpSep.Render("  ·  ")
 	bar := S.HelpKey.Render("tab") + S.HelpDesc.Render(" next field") +
 		sep + S.HelpKey.Render("enter") + S.HelpDesc.Render(" connect") +
-		sep + S.HelpKey.Render("esc") + S.HelpDesc.Render(" cancel")
+		sep + S.HelpKey.Render("esc") + S.HelpDesc.Render(" back")
 	return lipgloss.NewStyle().
 		Width(width).
 		Foreground(S.T.TextSecondary).

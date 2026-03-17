@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"github.com/mogglemoss/lazytailscale/model"
 	"github.com/mogglemoss/lazytailscale/server"
 	"github.com/mogglemoss/lazytailscale/ui"
@@ -10,6 +11,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+var farewells = [][2]string{
+	{"lazytailscale has concluded its inquiry.", "the substrate persists without it."},
+	{"signal lost. lazytailscale withdraws from the mesh.", "nodes continue their quiet communion."},
+	{"observation terminated. the network remains indifferent.", "it was watched. briefly."},
+	{"lazytailscale has logged its final packet and departed.", "connectivity endures."},
+	{"session dissolved. the tailnet carries on.", "it always does."},
+	{"lazytailscale blinks out. the mesh does not notice.", "this is fine."},
+	{"inquiry suspended indefinitely.", "the peers hold their positions."},
+	{"monitoring ceased. the substrate hums on without witness.", "as it prefers."},
+	{"lazytailscale has exited the lattice.", "the nodes remember nothing."},
+	{"dashboard offline. the network requires no dashboard to exist.", "it simply is."},
+}
 
 // version is set at build time by GoReleaser via ldflags.
 var version = "dev"
@@ -49,4 +63,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	msg := farewells[rand.Intn(len(farewells))]
+	fmt.Println()
+	fmt.Println("  ◈  " + msg[0])
+	fmt.Println("     " + msg[1])
+	fmt.Println()
 }

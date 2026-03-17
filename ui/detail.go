@@ -325,12 +325,50 @@ func renderPingStats(history []time.Duration) string {
 		return S.DetailLabel.Render("  node unresponsive to inquiry")
 	}
 	avg := total / time.Duration(count)
-	return fmt.Sprintf("  %s  avg %s  min %s  max %s",
+	delta := latencyDelta(history)
+	return fmt.Sprintf("  %s  avg %s%s  min %s  max %s",
 		S.DetailLabel.Render("latency"),
 		sparkColorFor(avg).Render(fmtDur(avg)),
+		delta,
 		S.DetailValue.Render(fmtDur(minD)),
 		S.DetailValue.Render(fmtDur(maxD)),
 	)
+}
+
+// latencyDelta returns a styled ↓ or ↑ if the recent half of ping history
+// shows a meaningful trend versus the older half. Empty string if stable.
+func latencyDelta(history []time.Duration) string {
+	if len(history) < 4 {
+		return ""
+	}
+	avg := func(samples []time.Duration) (time.Duration, int) {
+		var total time.Duration
+		var n int
+		for _, d := range samples {
+			if d != tailscale.PingFailed && d > 0 {
+				total += d
+				n++
+			}
+		}
+		return total, n
+	}
+	mid := len(history) / 2
+	oldTotal, oldN := avg(history[:mid])
+	newTotal, newN := avg(history[mid:])
+	if oldN == 0 || newN == 0 {
+		return ""
+	}
+	oldAvg := oldTotal / time.Duration(oldN)
+	newAvg := newTotal / time.Duration(newN)
+	diff := float64(newAvg-oldAvg) / float64(oldAvg)
+	switch {
+	case diff < -0.15:
+		return S.SparkGood.Render(" ↓")
+	case diff > 0.15:
+		return S.SparkBad.Render(" ↑")
+	default:
+		return ""
+	}
 }
 
 func fmtDur(d time.Duration) string {

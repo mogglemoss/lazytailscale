@@ -19,7 +19,9 @@ type PeerItem struct {
 	Flashing bool // briefly true when the peer's online state just changed
 }
 
-func (p PeerItem) FilterValue() string { return p.Peer.Hostname }
+func (p PeerItem) FilterValue() string {
+	return p.Peer.Hostname + " " + p.Peer.TailscaleIP + " " + p.Peer.OS + " " + p.Peer.DNSName
+}
 func (p PeerItem) Title() string       { return p.Peer.Hostname }
 func (p PeerItem) Description() string { return p.Peer.TailscaleIP }
 

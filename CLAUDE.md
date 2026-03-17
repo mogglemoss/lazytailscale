@@ -28,13 +28,14 @@ lazytailscale/
 ├── main.go               # Entry point, tea.NewProgram; --serve/--port/--host flags
 ├── model/
 │   ├── model.go          # Root model: Init / Update / View
+│   ├── modal.go          # Connection modal: pick + SSH form + SSH error panel
 │   ├── keys.go           # Keybindings (key.Binding)
 │   └── messages.go       # All tea.Msg types
 ├── ui/
 │   ├── peerlist.go       # Left pane: peer list component
 │   ├── detail.go         # Right pane: detail panel component
 │   ├── statusbar.go      # Top bar: network name, self IP, online status
-│   ├── helpbar.go        # Bottom bar: keybinding hints + connect popup + SSH prompt
+│   ├── helpbar.go        # Bottom bar: keybinding hints + modal hints
 │   └── styles.go         # All lipgloss styles, single source of truth
 ├── tailscale/
 │   ├── client.go         # LocalClient wrapper, polling logic
@@ -66,17 +67,22 @@ All async work returns via `tea.Cmd`. Nothing blocks Update.
 ### Message flow
 
 ```
-tickMsg (1s)     → triggers fetchPeersCmd
-fetchPeersCmd    → returns peersLoadedMsg
-peersLoadedMsg   → updates model.peers, triggers pingCmd for selected peer
-pingCmd          → returns pingResultMsg
-pingResultMsg    → updates sparkline ring buffer
-windowSizeMsg    → recalculates layout dimensions
-enter (on peer)  → connectPopup=true (shows picker in help bar area)
-  s/enter        → enterSSHPrompt → ssh.Launch → tea.ExecProcess
-  r              → rdp.Launch (background GUI process)
-  v              → vnc.Launch (background GUI process)
-  esc            → connectPopup=false
+tickMsg (5s)         → triggers fetchPeersCmd
+fetchPeersCmd        → returns peersLoadedMsg
+peersLoadedMsg       → updates model.peers; sets refreshFlash; guards SetItems when filtering
+pingCmd              → returns pingResultMsg
+pingResultMsg        → updates sparkline ring buffer; sets pingFlash
+windowSizeMsg        → recalculates layout dimensions
+enter (on peer)      → model.modal = &connectModal{stage: pick} (centered modal)
+  enter / s          → tryFastSSH (fast-path if creds saved) or enterSSHStage (Huh form)
+  r                  → rdp.Launch (background GUI process)
+  v                  → vnc.Launch (background GUI process)
+  esc                → modal = nil
+ssh.SSHDoneMsg       → sets returnMsg (welcome-back copy, clears after 4s)
+ssh.SSHErrorMsg      → sets sshErr (dismissable error panel, any key clears)
+exitNodeResultMsg    → sets exitFlash (status bar ⬡ pulse, clears after 1s)
+refreshFlashClearMsg → clears refreshFlash ◦ heartbeat
+list.FilterMatchesMsg → forwarded to m.list.Update (required for async filter results)
 ```
 
 ### Layout
@@ -134,8 +140,16 @@ type Peer struct {
 - Built on `bubbles/list` with a custom `list.DefaultDelegate`
 - Status dot: ● green = online, ● amber = idle (seen < 5min), ● red = offline,
   ● gray = unknown
-- Show hostname (truncated to 18 chars) + OS tag right-aligned
-- Filter mode: `/` activates list's built-in filtering
+- Show hostname (truncated to 16 chars) + OS tag right-aligned
+- Filter mode: `/` activates list's built-in filtering; `FilterValue()` returns
+  `hostname + " " + tailscaleIP + " " + OS + " " + DNSName` so all four fields are searchable
+- **Critical:** `list.SetItems()` internally calls `resetFiltering()`, wiping any active
+  filter query. Always guard with `m.list.FilterState() == list.Unfiltered` before calling.
+  Also forward `list.FilterMatchesMsg` to `m.list.Update()` — bubbles filter is async and
+  returns results via this message type; dropping it means the list never applies the filter.
+- Scroll indicators (▲ / ▼) rendered above/below the list when the peer count exceeds the
+  visible height; list height is reduced by 1 per indicator inside `renderListPane()` (value
+  receiver — safe to mutate without persisting)
 
 ## Detail panel
 
@@ -145,7 +159,7 @@ bottom with lipgloss borders between them:
 1. **Header** — hostname, Tailscale IP, MagicDNS name
 2. **Meta row** — OS, Tailscale version, last seen (relative: "2m ago")
 3. **Routes** — advertised routes with approved/pending status
-4. **Ping** — sparkline (8 bars, last 8 ping results) + avg/min/max
+4. **Ping** — sparkline (8 bars, last 8 ping results) + avg/min/max + trend arrow (↓/↑ when recent half differs from older half by >15%)
 5. **Tags** — ACL tags if present
 
 Sparkline bars: use braille block characters `▁▂▃▄▅▆▇█` scaled to min/max of
@@ -166,20 +180,36 @@ the window. Color: green if avg < 10ms, amber < 50ms, red ≥ 50ms.
 | `?` | Toggle full help |
 | `q` / `ctrl+c` | Quit |
 
-### Connect popup (replaces help bar while open)
+### Connection modal (centered, replaces body while open)
 
-`enter` on a non-self peer opens a picker rendered in the help bar area:
+`enter` on a non-self peer opens a centered modal rendered over a dimmed background
+(`lipgloss.Place` + `lipgloss.WithWhitespaceBackground(S.T.ModalDimColor)`).
 
+**Stage 1 — pick:**
 ```
-Connect to mollusk:  s ssh  ·  r rdp  ·  v vnc  ·  esc cancel
+Connect to mollusk:  enter/s ssh  ·  r rdp  ·  v vnc  ·  esc cancel
 ```
+- `enter` / `s` — SSH: `tryFastSSH()` if credentials saved for this host → direct launch;
+  otherwise advances to SSH stage (Huh form)
+- `r` — RDP: launches immediately
+- `v` — VNC: launches immediately
+- `esc` — closes modal
 
-- `s` / `enter` — SSH: username prompt → `tea.ExecProcess` handoff
-- `r` — RDP: `open rdp://` (macOS), `xfreerdp`/`remmina` (Linux), `mstsc` (Windows); dimmed when target peer OS ≠ windows
-- `v` — VNC: `open vnc://` (macOS), `vncviewer`/`xdg-open` (Linux); credentials handled by viewer app
-- `esc` — dismiss
+**Stage 2 — SSH form (Huh):**
+- Username + port fields; pre-filled with saved values or `$USER` / `22`
+- Animated border shimmer cycles through pink→purple→violet using `mascotFrame % len(shimmerColors)`
+- `enter` confirms → saves credentials → `ssh.Launch` → `tea.ExecProcess`
+- `esc` returns to pick stage (not close)
 
-No navigation state — one keypress fires immediately.
+**SSH error panel:**
+- If `ssh.Launch` returns `SSHErrorMsg`, an `sshErrState` is set
+- Renders as a centered hot-pink bordered panel over the dimmed body
+- Any keypress (except `ctrl+c`) dismisses it; auto-dismissed after 5s via `sshErrClearMsg`
+
+**Welcome-back:**
+- `ssh.SSHDoneMsg` sets `m.returnMsg` with a random on-brand message
+- Shown in status bar with `✦` prefix in mint green; mascot enters `MascotReturning` state
+- Clears after 4s via `returnMsgClearMsg`
 
 ### SSH server mode
 

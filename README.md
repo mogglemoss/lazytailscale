@@ -31,13 +31,13 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 **Latency**
 - Pings the selected peer every 10 seconds via TSMP
-- Sparkline of last 8 results with avg / min / max
+- Sparkline of last 8 results with avg / min / max and trend arrow (↓ improving · ↑ degrading)
 - Color-coded: green < 10ms · amber < 50ms · red ≥ 50ms · `✕` for failed
 
 **Connect**
-- `enter` opens a connection type picker: `s ssh · r rdp · v vnc · esc cancel`
-- **SSH** — suspends the TUI, hands off the terminal, resumes on exit; username prompt pre-filled with your local user, remembered per-host for the session; MagicDNS name used when available
-- **RDP** — opens the platform RDP client (`open rdp://` on macOS, `xfreerdp`/`remmina` on Linux, `mstsc` on Windows); dimmed when the target peer is not running Windows
+- `enter` on a peer opens a centered connection picker modal
+- **SSH** — `enter` fast-paths directly if credentials are saved for that host; `s` opens the form to review or edit username and port; suspends the TUI and hands off the terminal cleanly, resuming with a welcome-back message on exit; connection failures surface a dismissable error panel rather than a silent flash
+- **RDP** — opens the platform RDP client (`open rdp://` on macOS, `xfreerdp`/`remmina` on Linux, `mstsc` on Windows)
 - **VNC** — opens the platform VNC viewer (`open vnc://` on macOS, `vncviewer`/`xdg-open` on Linux); credentials handled by the viewer app
 
 **SSH server mode**
@@ -52,6 +52,12 @@ A terminal dashboard for your Tailscale network. Two-pane keyboard-driven TUI: p
 
 **Notifications**
 - Status bar briefly notes when a peer connects or disconnects between polls
+- Exit node flash: `⬡` pulses in the status bar when an exit node is activated or deactivated
+- Refresh heartbeat: `◦` appears in the status bar after each successful peer fetch
+
+**Filter**
+- `/` activates the peer list filter; matches against hostname, Tailscale IP, OS, and MagicDNS name
+- Scroll indicators (▲ / ▼) appear when the list is taller than the viewport
 
 **Theming**
 - Built-in Charm Native palette (hot pink · mint · soft purple)
@@ -106,19 +112,24 @@ Requires `tailscaled` running locally. On Linux the process must have access to 
 | `↑` / `k` | Previous node |
 | `↓` / `j` | Next node |
 | `enter` | Open connection picker for selected node |
-| `s` | SSH (inside connection picker) |
-| `r` | RDP (inside connection picker, dimmed on non-Windows targets) |
-| `v` | VNC (inside connection picker) |
-| `esc` | Cancel / dismiss picker |
 | `e` | Toggle exit node on / off |
 | `u` | Connect / disconnect Tailscale |
 | `p` | Ping selected node now |
-| `r` | Toggle subnet routes (normal mode) |
+| `r` | Toggle subnet routes expanded view |
 | `c` | Copy address to clipboard (MagicDNS preferred) |
-| `/` | Filter peer list |
+| `/` | Filter peer list (hostname · IP · OS · DNS) |
 | `R` | Refresh peer list |
 | `?` | Toggle full help |
 | `q` / `ctrl+c` | Quit |
+
+**Inside the connection picker:**
+
+| Key | Action |
+|-----|--------|
+| `enter` / `s` | SSH (fast-path if credentials saved; `s` always shows form) |
+| `r` | RDP |
+| `v` | VNC |
+| `esc` | Cancel |
 
 Mouse: click to select · scroll wheel to navigate list or scroll detail pane.
 

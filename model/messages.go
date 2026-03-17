@@ -42,6 +42,18 @@ type pingFlashClearMsg struct{}
 // peerFlashClearMsg clears the flash highlight on a specific peer row.
 type peerFlashClearMsg struct{ hostname string }
 
+// returnMsgClearMsg clears the welcome-back message after it has displayed.
+type returnMsgClearMsg struct{}
+
+// sshErrClearMsg auto-dismisses the SSH error panel if the user ignores it.
+type sshErrClearMsg struct{}
+
+// exitFlashClearMsg clears the ⬡ flash after exit node is toggled.
+type exitFlashClearMsg struct{}
+
+// refreshFlashClearMsg clears the ◦ heartbeat after a successful peer fetch.
+type refreshFlashClearMsg struct{}
+
 // rdpDoneMsg is sent when an RDP client launches successfully.
 type rdpDoneMsg struct{}
 

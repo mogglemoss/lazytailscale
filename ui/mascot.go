@@ -6,9 +6,10 @@ import "github.com/charmbracelet/lipgloss"
 type MascotState int
 
 const (
-	MascotNormal  MascotState = iota // gentle blink, tail wags
-	MascotPinging                    // eye flickers ◉/◌ (scanning), tail spins
-	MascotOffline                    // sad eye, no tail movement
+	MascotNormal    MascotState = iota // gentle blink, tail wags
+	MascotPinging                      // eye flickers ◉/◌ (scanning), tail spins
+	MascotOffline                      // sad eye, no tail movement
+	MascotReturning                    // excited — rapid eye + tail, mint border
 )
 
 // creatureBorder uses AccentSubtle (purple) — visible in both dark and light terminals.
@@ -21,6 +22,12 @@ var creatureBorder = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 var creatureBorderOffline = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 	Light: "#9A9A9A",
 	Dark:  "#6C6C6C",
+})
+
+// creatureBorderReturning uses Online mint-green — happy to have you back.
+var creatureBorderReturning = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+	Light: "#028F5B",
+	Dark:  "#04B575",
 })
 
 type creatureFrame struct {
@@ -52,6 +59,18 @@ var pingFrames = [8]creatureFrame{
 	{"◉", "∿"},
 }
 
+// returningFrames — excited rapid eye + energetic tail. welcome back!
+var returningFrames = [8]creatureFrame{
+	{"◎", "≋"},
+	{"◉", "~"},
+	{"◎", "≋"},
+	{"◉", "∿"},
+	{"◎", "≋"},
+	{"◉", "~"},
+	{"◎", "≋"},
+	{"◉", "∿"},
+}
+
 // offlineFrames — still, defeated.
 var offlineFrames = [8]creatureFrame{
 	{"•", " "},
@@ -77,6 +96,9 @@ func CreatureLines(frame int, state MascotState) [3]string {
 	case MascotOffline:
 		f = offlineFrames[frame%8]
 		border = creatureBorderOffline
+	case MascotReturning:
+		f = returningFrames[frame%8]
+		border = creatureBorderReturning
 	default:
 		f = normalFrames[frame%8]
 		border = creatureBorder
@@ -98,6 +120,9 @@ func StatusLogoTail(frame int, state MascotState) string {
 	case MascotPinging:
 		tails := [4]string{"~", "∿", "~", "∿"}
 		return S.StatusMeta.Render(tails[frame%4])
+	case MascotReturning:
+		tails := [4]string{"≋", "~", "≋", "∿"}
+		return creatureBorderReturning.Render(tails[frame%4])
 	default:
 		tails := [4]string{" ", "~", " ", "∿"}
 		return S.StatusMeta.Render(tails[frame%4])

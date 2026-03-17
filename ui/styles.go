@@ -16,6 +16,7 @@ type Theme struct {
 	Border        lipgloss.AdaptiveColor // panel dividers
 	TextPrimary   lipgloss.AdaptiveColor
 	TextSecondary lipgloss.AdaptiveColor
+	ModalDimColor lipgloss.AdaptiveColor // background behind centered modal panels
 }
 
 // Default is the Charm Native theme.
@@ -25,12 +26,13 @@ var Default = Theme{
 	Offline: lipgloss.Color("#FF5F87"),
 	Unknown: lipgloss.AdaptiveColor{Light: "#9A9A9A", Dark: "#6C6C6C"},
 
-	Accent:       lipgloss.Color("#FF5F87"),
-	AccentSubtle: lipgloss.AdaptiveColor{Light: "#5B41DF", Dark: "#7B61FF"},
-	Selected:     lipgloss.AdaptiveColor{Light: "#DDD9FF", Dark: "#2D2B55"},
-	Border:       lipgloss.AdaptiveColor{Light: "#CCCCCC", Dark: "#3D3D3D"},
-	TextPrimary:  lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#FFFDF5"},
+	Accent:        lipgloss.Color("#FF5F87"),
+	AccentSubtle:  lipgloss.AdaptiveColor{Light: "#5B41DF", Dark: "#7B61FF"},
+	Selected:      lipgloss.AdaptiveColor{Light: "#DDD9FF", Dark: "#2D2B55"},
+	Border:        lipgloss.AdaptiveColor{Light: "#CCCCCC", Dark: "#3D3D3D"},
+	TextPrimary:   lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#FFFDF5"},
 	TextSecondary: lipgloss.AdaptiveColor{Light: "#6C6A62", Dark: "#B4B2A9"},
+	ModalDimColor: lipgloss.AdaptiveColor{Light: "#e4e4ee", Dark: "#17171f"},
 }
 
 // Styles holds all pre-built lipgloss styles derived from the active theme.
@@ -162,6 +164,7 @@ var Presets = map[string]Theme{
 		Border:        lipgloss.AdaptiveColor{Light: "#bcc0cc", Dark: "#45475a"},
 		TextPrimary:   lipgloss.AdaptiveColor{Light: "#4c4f69", Dark: "#cdd6f4"},
 		TextSecondary: lipgloss.AdaptiveColor{Light: "#6c6f85", Dark: "#9399b2"},
+		ModalDimColor: lipgloss.AdaptiveColor{Light: "#e0e4ec", Dark: "#14141e"},
 	},
 	"dracula": {
 		Online:        lipgloss.Color("#50fa7b"),
@@ -174,6 +177,7 @@ var Presets = map[string]Theme{
 		Border:        lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#6272a4"},
 		TextPrimary:   lipgloss.AdaptiveColor{Light: "#282a36", Dark: "#f8f8f2"},
 		TextSecondary: lipgloss.AdaptiveColor{Light: "#6272a4", Dark: "#6272a4"},
+		ModalDimColor: lipgloss.AdaptiveColor{Light: "#e8e8f0", Dark: "#161620"},
 	},
 	"nord": {
 		Online:        lipgloss.Color("#a3be8c"),
@@ -186,6 +190,7 @@ var Presets = map[string]Theme{
 		Border:        lipgloss.AdaptiveColor{Light: "#d8dee9", Dark: "#4c566a"},
 		TextPrimary:   lipgloss.AdaptiveColor{Light: "#2e3440", Dark: "#eceff4"},
 		TextSecondary: lipgloss.AdaptiveColor{Light: "#4c566a", Dark: "#7b88a1"},
+		ModalDimColor: lipgloss.AdaptiveColor{Light: "#e8ecf0", Dark: "#181c22"},
 	},
 }
 

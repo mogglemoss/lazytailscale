@@ -2,6 +2,19 @@ package model
 
 import (
 	"context"
+	"os/exec"
+	"os/user"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/mogglemoss/lazytailscale/config"
 	"github.com/mogglemoss/lazytailscale/ping"
 	"github.com/mogglemoss/lazytailscale/rdp"
@@ -9,23 +22,6 @@ import (
 	"github.com/mogglemoss/lazytailscale/tailscale"
 	"github.com/mogglemoss/lazytailscale/ui"
 	"github.com/mogglemoss/lazytailscale/vnc"
-	"os/exec"
-	"os/user"
-	"runtime"
-	"strings"
-	"time"
-
-	"fmt"
-	"regexp"
-	"strconv"
-
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -57,21 +53,25 @@ type Model struct {
 	ready       bool
 	mascotFrame int
 
-	// SSH form state (Huh form replacing the old textinput prompt)
-	sshForm       *huh.Form
-	sshFormValues *sshFormState
-	sshTarget     tailscale.Peer
-	sshUsernames  map[string]string // hostname → last used username (persisted)
-	sshPorts      map[string]string // hostname → last used port (persisted)
-	defaultUser   string            // local system username
+	sshUsernames      map[string]string // hostname → last used username (persisted)
+	sshPorts          map[string]string // hostname → last used port (persisted)
+	defaultUser       string            // local system username
+	lastConnectedHost string            // hostname of the most recent SSH session
 
-	// Connect popup state (shown when Enter is pressed on a peer)
-	connectPopup  bool
-	connectTarget tailscale.Peer
+	// Connection modal (nil when closed).
+	modal *connectModal
 
-	// Animation state
-	flashPeers map[string]bool // hostname → briefly highlight this row
-	pingFlash  bool            // briefly flash the sparkline after a ping result
+	// Welcome-back message shown briefly after a successful SSH session.
+	returnMsg string
+
+	// SSH error panel — shown after a failed session; any key dismisses.
+	sshErr *sshErrState
+
+	// Animation state.
+	flashPeers   map[string]bool // hostname → briefly highlight this row
+	pingFlash    bool            // briefly flash the sparkline after a ping result
+	exitFlash    bool            // briefly flash ⬡ in status bar when exit node is toggled
+	refreshFlash bool            // briefly flash ◦ in status bar after successful peer fetch
 }
 
 // New creates and returns the initial model.
@@ -80,7 +80,6 @@ func New(demo bool) Model {
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(ui.S.T.Accent)
 
-	// Detect local username as the default SSH user.
 	defaultUser := "user"
 	if u, err := user.Current(); err == nil {
 		defaultUser = u.Username
@@ -112,9 +111,8 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	// SSH form intercepts all messages while active.
-	if m.sshForm != nil {
-		// Window resize must be handled even during form use.
+	// SSH error panel intercepts input — any key dismisses it.
+	if m.sshErr != nil {
 		if ws, ok := msg.(tea.WindowSizeMsg); ok {
 			m.width = ws.Width
 			m.height = ws.Height
@@ -122,20 +120,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ready = true
 			return m, nil
 		}
-		// ctrl+c always quits.
+		if km, ok := msg.(tea.KeyMsg); ok {
+			if km.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			m.sshErr = nil
+			return m, nil
+		}
+		if _, ok := msg.(sshErrClearMsg); ok {
+			m.sshErr = nil
+		}
+		return m, nil
+	}
+
+	// Modal intercepts all messages while active.
+	if m.modal != nil {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			m.width = ws.Width
+			m.height = ws.Height
+			m = m.recalcLayout()
+			m.ready = true
+			return m, nil
+		}
 		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-		f, cmd := m.sshForm.Update(msg)
-		m.sshForm = f.(*huh.Form)
-		switch m.sshForm.State {
-		case huh.StateCompleted:
-			return m.launchSSHFromForm()
-		case huh.StateAborted:
-			m.sshForm = nil
-			m.sshFormValues = nil
-		}
-		return m, cmd
+		return m.updateModal(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -166,13 +176,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errMsg = msg.err.Error()
 			cmds = append(cmds, clearStatusCmd())
 		} else {
+			m.refreshFlash = true
+			cmds = append(cmds, refreshFlashClearCmd())
 			var notifCmds []tea.Cmd
 			m, notifCmds = m.mergePeers(msg.peers, msg.info)
 			cmds = append(cmds, notifCmds...)
 			if len(notifCmds) == 0 {
 				m.errMsg = ""
 			}
-			m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
+			// Don't reset items while the user is filtering — bubbles SetItems
+			// calls resetFiltering() internally, wiping any active filter query.
+			if m.list.FilterState() == list.Unfiltered {
+				m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
+			}
 			m = m.refreshDetail()
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf && !m.pinging && len(p.PingHistory) == 0 {
 				m.pinging = true
@@ -193,15 +209,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case peerFlashClearMsg:
 		delete(m.flashPeers, msg.hostname)
-		m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
+		if m.list.FilterState() == list.Unfiltered {
+			m.list.SetItems(ui.PeersToItems(m.peers, m.flashPeers))
+		}
 
 	case statusClearMsg:
 		m.errMsg = ""
+
+	case returnMsgClearMsg:
+		m.returnMsg = ""
+
+	case sshErrClearMsg:
+		m.sshErr = nil
+
+	case exitFlashClearMsg:
+		m.exitFlash = false
+
+	case refreshFlashClearMsg:
+		m.refreshFlash = false
 
 	case exitNodeResultMsg:
 		if msg.err != nil {
 			m.errMsg = "exit node: " + msg.err.Error()
 			cmds = append(cmds, clearStatusCmd())
+		} else {
+			m.exitFlash = true
+			cmds = append(cmds, exitFlashClearCmd())
 		}
 		cmds = append(cmds, m.fetchPeersCmd())
 
@@ -213,11 +246,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.fetchPeersCmd())
 
 	case ssh.SSHErrorMsg:
-		m.errMsg = msg.Err.Error()
-		cmds = append(cmds, clearStatusCmd())
+		m.sshErr = &sshErrState{host: m.lastConnectedHost, err: msg.Err}
+		m.lastConnectedHost = ""
+		cmds = append(cmds, sshErrClearCmd())
 
 	case ssh.SSHDoneMsg:
-		// TUI already resumed — nothing to do.
+		if m.lastConnectedHost != "" {
+			m.returnMsg = "connection to " + m.lastConnectedHost + " concluded. welcome back to the substrate."
+			m.lastConnectedHost = ""
+		} else {
+			m.returnMsg = "session concluded. welcome back to the substrate."
+		}
+		cmds = append(cmds, returnMsgClearCmd())
 
 	case rdp.ErrMsg:
 		m.errMsg = "rdp: " + msg.Err.Error()
@@ -234,7 +274,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// VNC viewer launched in background — nothing to do.
 
 	case tea.MouseMsg:
-		if m.sshForm == nil && !m.connectPopup {
+		if m.modal == nil {
 			m = m.handleMouse(msg, &cmds)
 		}
 
@@ -244,12 +284,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
-		// Connect popup intercepts all keys while active.
-		if m.connectPopup {
-			return m.handleConnectPopupKey(msg)
-		}
-
-		// While filtering, forward all keys to the list.
 		if m.list.FilterState() == list.Filtering {
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
@@ -269,7 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.SSH):
 			if p := m.selectedPeer(); p != nil && p.TailscaleIP != "" && !p.IsSelf {
-				m = m.enterConnectPopup(*p)
+				m.modal = &connectModal{stage: modalStagePick, target: *p}
 			}
 
 		case key.Matches(msg, m.keys.Ping):
@@ -303,7 +337,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchPeersCmd())
 
 		case key.Matches(msg, m.keys.Filter):
-			// Explicitly activate the list's filter mode via our own keymap.
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
@@ -322,6 +355,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case list.FilterMatchesMsg:
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		cmds = append(cmds, cmd)
+
 	default:
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
@@ -333,6 +371,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // mascotState derives the current mascot animation state from model state.
 func (m Model) mascotState() ui.MascotState {
+	if m.returnMsg != "" {
+		return ui.MascotReturning
+	}
 	if m.info.Stopped || (!m.info.Online && m.info.NetworkName != "") {
 		return ui.MascotOffline
 	}
@@ -348,37 +389,80 @@ func (m Model) View() string {
 		return "\n  " + m.spinner.View() + " Loading…\n"
 	}
 
-	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.width, m.mascotFrame, m.mascotState())
+	statusBar := ui.RenderStatusBar(m.info, m.errMsg, m.returnMsg, m.width, m.mascotFrame, m.mascotState(), m.exitFlash, m.refreshFlash)
+	helpBar := m.renderHelpBar()
 
-	var helpBar string
-	switch {
-	case m.connectPopup:
-		helpBar = ui.RenderConnectPopup(m.width, m.connectTarget.Hostname, m.connectTarget.OS)
-	case m.sshForm != nil:
-		helpBar = ui.RenderSSHFormHint(m.width)
-	default:
-		helpBar = ui.RenderHelpBar(m.width, m.showHelp)
+	// SSH error panel takes over the body when a session fails.
+	if m.sshErr != nil {
+		hint := ui.RenderModalDismissHint(m.width)
+		body := lipgloss.Place(m.width, m.bodyHeight(), lipgloss.Center, lipgloss.Center,
+			m.renderSSHErrPanel(),
+			lipgloss.WithWhitespaceBackground(ui.S.T.ModalDimColor),
+		)
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, hint)
 	}
 
-	listView := ui.S.PanelBorder.
-		Width(listPaneWidth).
-		Height(m.bodyHeight()).
-		Render(m.list.View())
-
-	var detailView string
-	if m.sshForm != nil {
-		header := "\n" + ui.S.DetailHeader.Render("  ssh into "+m.sshTarget.Hostname) + "\n\n"
-		detailView = lipgloss.NewStyle().
-			Width(m.detailWidth()).
-			Height(m.bodyHeight()).
-			Render(header + m.sshForm.View())
-	} else {
-		detailView = m.viewport.View()
+	// Modal takes over the body when open.
+	if m.modal != nil {
+		body := lipgloss.Place(m.width, m.bodyHeight(), lipgloss.Center, lipgloss.Center,
+			m.renderModal(),
+			lipgloss.WithWhitespaceBackground(ui.S.T.ModalDimColor),
+		)
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, helpBar)
 	}
+
+	listView := m.renderListPane()
+	detailView := m.viewport.View()
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
-
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, helpBar)
+}
+
+// renderListPane renders the left peer list with ▲/▼ scroll indicators when needed.
+// Runs in View() (value receiver), so SetHeight on the local list copy is safe.
+func (m Model) renderListPane() string {
+	hasAbove := m.list.Paginator.Page > 0
+	hasBelow := m.list.Paginator.Page < m.list.Paginator.TotalPages-1
+
+	// Reduce list height to make room for any indicator lines.
+	indH := 0
+	if hasAbove {
+		indH++
+	}
+	if hasBelow {
+		indH++
+	}
+	if indH > 0 {
+		m.list.SetHeight(m.bodyHeight() - indH)
+	}
+
+	var parts []string
+	if hasAbove {
+		parts = append(parts, ui.S.HelpDesc.Render("  ▲ more"))
+	}
+	parts = append(parts, m.list.View())
+	if hasBelow {
+		parts = append(parts, ui.S.HelpDesc.Render("  ▼ more"))
+	}
+
+	return ui.S.PanelBorder.
+		Width(listPaneWidth).
+		Height(m.bodyHeight()).
+		Render(strings.Join(parts, "\n"))
+}
+
+// renderHelpBar returns the correct help bar for the current state.
+func (m Model) renderHelpBar() string {
+	if m.modal == nil {
+		return ui.RenderHelpBar(m.width, m.showHelp)
+	}
+	switch m.modal.stage {
+	case modalStagePick:
+		return ui.RenderModalPickHint(m.width, m.modal.target.Hostname, m.modal.target.OS)
+	case modalStageSSH:
+		return ui.RenderModalSSHHint(m.width)
+	}
+	return ui.RenderHelpBar(m.width, m.showHelp)
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -416,7 +500,7 @@ func (m Model) recalcLayout() Model {
 	return m
 }
 
-// ── Peer helpers ─────────────────────────────────────────────────────────────
+// ── Peer helpers ──────────────────────────────────────────────────────────────
 
 func (m Model) selectedPeer() *tailscale.Peer {
 	item := m.list.SelectedItem()
@@ -451,7 +535,6 @@ func (m Model) refreshDetail() Model {
 func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (Model, []tea.Cmd) {
 	m.info = info
 
-	// Build lookup of previous online state and ping history by IP.
 	type prev struct {
 		online bool
 		hist   []time.Duration
@@ -462,7 +545,6 @@ func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (M
 		prevMap[p.TailscaleIP] = prev{online: p.Online, hist: p.PingHistory, seen: true}
 	}
 
-	// Find active exit node.
 	m.info.ActiveExitNode = ""
 	for i := range fresh {
 		if fresh[i].IsExitNode {
@@ -476,7 +558,6 @@ func (m Model) mergePeers(fresh []tailscale.Peer, info tailscale.NetworkInfo) (M
 		ip := fresh[i].TailscaleIP
 		if p, ok := prevMap[ip]; ok {
 			fresh[i].PingHistory = p.hist
-			// Notify and flash on status transitions for non-self peers.
 			if p.seen && !fresh[i].IsSelf && fresh[i].Online != p.online {
 				name := fresh[i].Hostname
 				if fresh[i].Online {
@@ -508,108 +589,10 @@ func (m Model) applyPingResult(msg pingResultMsg) Model {
 	return m
 }
 
-// ── Connect popup ────────────────────────────────────────────────────────────
-
-func (m Model) enterConnectPopup(peer tailscale.Peer) Model {
-	m.connectPopup = true
-	m.connectTarget = peer
-	return m
-}
-
-func (m Model) handleConnectPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.connectPopup = false
-	switch msg.String() {
-	case "s", "enter":
-		var cmd tea.Cmd
-		m, cmd = m.enterSSHForm(m.connectTarget)
-		return m, cmd
-	case "r":
-		return m, rdp.Launch(m.connectTarget.TailscaleIP)
-	case "v":
-		return m, vnc.Launch(m.connectTarget.TailscaleIP)
-	// esc / ctrl+c — popup already closed above, nothing more to do
-	}
-	return m, nil
-}
-
-// ── SSH form (Huh) ───────────────────────────────────────────────────────────
-
-// sshFormState holds the bound values Huh writes into as the user types.
-// Stored as a pointer so the values survive model copies (value receiver pattern).
-type sshFormState struct {
-	username string
-	port     string
-}
-
-var sshUsernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.\-]+$`)
-
-func (m Model) enterSSHForm(peer tailscale.Peer) (Model, tea.Cmd) {
-	username := m.defaultUser
-	if last, ok := m.sshUsernames[peer.Hostname]; ok {
-		username = last
-	}
-	port := "22"
-	if last, ok := m.sshPorts[peer.Hostname]; ok {
-		port = last
-	}
-
-	values := &sshFormState{username: username, port: port}
-
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Username").
-				Value(&values.username).
-				Validate(func(s string) error {
-					if !sshUsernameRe.MatchString(s) {
-						return fmt.Errorf("letters, numbers, - _ . only")
-					}
-					return nil
-				}),
-			huh.NewInput().
-				Title("Port").
-				Value(&values.port).
-				Validate(func(s string) error {
-					n, err := strconv.Atoi(s)
-					if err != nil || n < 1 || n > 65535 {
-						return fmt.Errorf("must be 1–65535")
-					}
-					return nil
-				}),
-		),
-	).WithTheme(huh.ThemeCharm()).WithWidth(m.detailWidth() - 4)
-
-	m.sshForm = form
-	m.sshFormValues = values
-	m.sshTarget = peer
-	return m, form.Init()
-}
-
-func (m Model) launchSSHFromForm() (tea.Model, tea.Cmd) {
-	username := m.sshFormValues.username
-	port := m.sshFormValues.port
-
-	m.sshUsernames[m.sshTarget.Hostname] = username
-	m.sshPorts[m.sshTarget.Hostname] = port
-	config.SaveUsernames(m.sshUsernames)
-	config.SavePorts(m.sshPorts)
-
-	m.sshForm = nil
-	m.sshFormValues = nil
-
-	host := m.sshTarget.DNSName
-	if host == "" {
-		host = m.sshTarget.TailscaleIP
-	}
-	return m, ssh.Launch(username, host, port)
-}
-
 // ── Mouse ─────────────────────────────────────────────────────────────────────
 
-// listPaneBoundary returns the x coordinate (exclusive) where the list pane ends.
-// Clicks strictly left of this value hit the list; at or right hit the detail pane.
 func (m Model) listPaneBoundary() int {
-	return listPaneWidth + 1 // +1 for the border character
+	return listPaneWidth + 1
 }
 
 func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
@@ -654,14 +637,10 @@ func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
 		if msg.Action != tea.MouseActionRelease || !inListPane {
 			break
 		}
-		// Mouse coords are 1-indexed. Row 1 = app status bar.
-		// Row 2 = list status bar (SetShowStatusBar(true) renders above items).
-		// Row 3 = first list item → row 0.
 		row := msg.Y - 3
 		if row < 0 {
 			break
 		}
-		// Calculate which absolute peer index the clicked row maps to.
 		pageSize := m.bodyHeight()
 		page := m.list.Index() / pageSize
 		target := page*pageSize + row
@@ -671,7 +650,6 @@ func (m Model) handleMouse(msg tea.MouseMsg, cmds *[]tea.Cmd) Model {
 		if target >= len(m.peers) {
 			target = len(m.peers) - 1
 		}
-		// Move cursor to target by sending the list enough Up/Down messages.
 		current := m.list.Index()
 		diff := target - current
 		keyType := tea.KeyDown
@@ -745,7 +723,6 @@ func (m Model) toggleExitNodeCmd(p *tailscale.Peer) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		// If this peer is already the exit node, clear it; otherwise set it.
 		id := p.StableNodeID
 		if p.IsExitNode {
 			id = ""
@@ -764,6 +741,30 @@ func clearStatusCmd() tea.Cmd {
 func pingFlashClearCmd() tea.Cmd {
 	return tea.Tick(300*time.Millisecond, func(_ time.Time) tea.Msg {
 		return pingFlashClearMsg{}
+	})
+}
+
+func exitFlashClearCmd() tea.Cmd {
+	return tea.Tick(800*time.Millisecond, func(_ time.Time) tea.Msg {
+		return exitFlashClearMsg{}
+	})
+}
+
+func refreshFlashClearCmd() tea.Cmd {
+	return tea.Tick(1*time.Second, func(_ time.Time) tea.Msg {
+		return refreshFlashClearMsg{}
+	})
+}
+
+func sshErrClearCmd() tea.Cmd {
+	return tea.Tick(12*time.Second, func(_ time.Time) tea.Msg {
+		return sshErrClearMsg{}
+	})
+}
+
+func returnMsgClearCmd() tea.Cmd {
+	return tea.Tick(4*time.Second, func(_ time.Time) tea.Msg {
+		return returnMsgClearMsg{}
 	})
 }
 
