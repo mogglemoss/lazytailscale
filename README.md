@@ -69,6 +69,8 @@ brew install mogglemoss/tap/lazytailscale
 
 ```bash
 yay -S lazytailscale-bin
+# or
+paru -S lazytailscale-bin
 ```
 
 ### go install
